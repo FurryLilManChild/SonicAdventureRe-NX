@@ -1,7 +1,7 @@
 // SonicAdventureRe-nx: Horizon memory probe. Answers, from a real launch, whether the game's
 // 4 GB domain can sit at a fixed address: where the system put its regions, which 4 GB windows
 // hold every range the game maps free, and whether memory can be mapped at an address we choose
-// and seen at two addresses at once (the RAM mirrors). Writes sdmc:/switch/sonicadvre/probe.log.
+// and seen at two addresses at once (the RAM mirrors). Writes sdmc:/switch/SonicAdventureRe-nx/probe.log.
 #include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -148,8 +148,8 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
     consoleInit(NULL);
-    mkdir("sdmc:/switch/sonicadvre", 0777);
-    logf = fopen("sdmc:/switch/sonicadvre/probe.log", "a");
+    mkdir("sdmc:/switch/SonicAdventureRe-nx", 0777);
+    logf = fopen("sdmc:/switch/SonicAdventureRe-nx/probe.log", "a");
     say("SonicAdventureRe-nx memory probe\n");
     say("applet type %d (takeover is 0 or 1)\n", (int)appletGetAppletType());
     say("this program's code at %p\n", (void *)&main);
@@ -187,7 +187,7 @@ int main(int argc, char **argv)
     if (free_count)
         map_tests(first == 0 && free_count > 1 ? 1ULL << 32 : first);
 
-    say("\nDone. The log is in sdmc:/switch/sonicadvre/probe.log\nPress + to exit.\n");
+    say("\nDone. The log is in sdmc:/switch/SonicAdventureRe-nx/probe.log\nPress + to exit.\n");
     if (logf)
         fprintf(logf, "\n");
     PadState pad;

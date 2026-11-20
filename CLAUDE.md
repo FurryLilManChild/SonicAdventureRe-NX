@@ -11,6 +11,9 @@ skill before working here.
 - Claude writes all code, scripts and configs, reads logs, and commits.
 - the owner runs builds on his Windows PC when asked, tests on his PC and Switch, and moves Switch builds
   to the SD card himself. He writes no code.
+- Naming: everything is named after the project, SonicAdventureRe-nx (never a short form like
+  "sonicadvre", which could be Adventure or Advance). The SD card folder is
+  `sdmc:/switch/SonicAdventureRe-nx/` and its PC copy `out\sd\switch\SonicAdventureRe-nx\`.
 - Claude reaches `C:\SonicAdventureRe-nx` through the device bridge. The Japanese disc is in
   `assets\Sonic Adventure (Japan)\` (Redump bin/cue).
 
