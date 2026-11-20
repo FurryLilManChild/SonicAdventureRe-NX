@@ -2,6 +2,23 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-20: Horizon memory probe on the owner's Switch (3 launches, title takeover)
+
+- Address space: ASLR region 0x8000000 to 0x1000000000 (36 bits), so 4 GB windows 1 to 15.
+  Stack region fixed at 0x8000000 (size 0x78000000, window 0). Heap region (8 GB) and alias region
+  (6 GB) move each launch: heap at 0x14d400000 then 0x3a1000000 twice; alias at 0x45ce00000 then
+  0x71d000000 twice. 13 of 15 windows had every range the game maps unmapped each time.
+- Window 1 (the AArch64 build's fixed window) was NOT free on launch 1 (heap mapped
+  0x14d400000-0x214400000), free on launches 2 and 3. A fixed window fails some launches.
+- Code memory at a chosen address works: svcMapProcessCodeMemory at 0x100400000, set RX, called it
+  (returned 42), set RW, wrote and read back, unmapped (all result 0). On launch 1 the same call
+  at 0x300400000 failed 0xd401: that address was inside the heap region (unmapped, so the probe's
+  free test missed it). The window choice must avoid the heap and alias regions, not just mapped
+  pages.
+- One buffer at two addresses: svcMapProcessMemory with a heap buffer as the source failed (0xd401
+  inside window 1; 0xdc01 inside the heap region). Not yet tried: a code-memory mapping as the
+  source, which is how libnx's Jit makes its second view.
+
 ## 2026-11-20: AArch64 Linux build reaches the same frames under qemu
 
 - `tools/a64/`: a `clang` wrapper (first on PATH; the decomp's NATIVE_CC is plain clang) and
