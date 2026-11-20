@@ -49,7 +49,7 @@ skill before working here.
 ```
 decomp/          submodule, pinned (reshaped/sonic-adventure)
 patches/decomp/  our changes to it
-tools/           our scripts (retarget, English layer)
+tools/           our scripts: ref32 (pointer lowering), a64 (AArch64 toolchain wrappers), english
 switch/          the Horizon layer and NRO build
 docs/progress-log.md   newest first, one entry per session with evidence
 ```

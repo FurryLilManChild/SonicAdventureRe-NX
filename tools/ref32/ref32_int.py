@@ -99,6 +99,9 @@ def main():
             line = f'target triple = "{retarget}"'
         elif retarget and line.startswith('target datalayout = '):
             line = f'target datalayout = "{LAYOUTS[retarget.split("-")[0]]}"'
+        elif retarget and line.startswith('attributes #'):
+            # x86's CPU and features mean nothing to another backend
+            line = re.sub(r' "(?:target-cpu|target-features|tune-cpu)"="[^"]*"', '', line)
         else:
             line = lower_line(line)
         out.append(line)

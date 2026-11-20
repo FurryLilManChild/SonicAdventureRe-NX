@@ -1,0 +1,383 @@
+diff --git a/engine/native/a64.c b/engine/native/a64.c
+new file mode 100644
+index 0000000..43440ce
+--- /dev/null
++++ b/engine/native/a64.c
+@@ -0,0 +1,30 @@
++/* SonicAdventureRe-nx: what an AArch64 build of the native slice needs from
++ * its host code. Its C is read as x86-64's, for 32-bit references, with the
++ * Microsoft va_list (a pointer walking 8-byte slots) in place of SysV's, so
++ * that AArch64's backend can run it. The C library's vsprintf takes
++ * AArch64's va_list, whose arguments come from __stack alone once both of its
++ * register offsets are 0 or more: 8-byte slots, as the Microsoft list's are */
++#ifdef NATIVE_A64
++struct a64_va_list {
++    void *stack;
++    void *gr_top;
++    void *vr_top;
++    int gr_offs;
++    int vr_offs;
++};
++
++/* AArch64 passes a va_list, 32 bytes, by a pointer to a copy. The C library's
++ * vsprintf under another name, which clang's builtin of the name won't take */
++int a64_libc_vsprintf(char *s, const char *format, struct a64_va_list *args)
++    __asm__("vsprintf");
++
++int native_a64_vsprintf(char *s, const char *format, char *args);
++int native_a64_vsprintf(char *s, const char *format, char *args)
++{
++    struct a64_va_list list = {args, 0, 0, 0, 0};
++
++    return a64_libc_vsprintf(s, format, &list);
++}
++#else
++typedef int native_a64_empty;
++#endif
+diff --git a/engine/native/native.h b/engine/native/native.h
+index 45d6835..dbe3911 100644
+--- a/engine/native/native.h
++++ b/engine/native/native.h
+@@ -117,7 +117,26 @@ extern struct sa_engine *native_sound_engine;
+  * the SH-4 does. native_fpu_host loads it and returns the game's MXCSR, which
+  * native_fpu_game loads back as the call returns */
+ #define DEFAULT_MXCSR 0x1f80U
+-#ifdef __SSE__
++#if defined(NATIVE_A64) || defined(__aarch64__)
++/* SonicAdventureRe-nx: AArch64's FPCR in MXCSR's place. Its reset value, 0,
++ * rounds to nearest with no flushing; the game's (runner.c's set_fpu) rounds
++ * toward zero and flushes. The asm is AArch64's even where the C was read as
++ * x86's: only AArch64's backend sees it */
++#define DEFAULT_FPCR 0U
++static inline uint32_t native_fpu_host(void)
++{
++    unsigned long long game;
++
++    __asm__ volatile("mrs %0, fpcr" : "=r"(game));
++    __asm__ volatile("msr fpcr, %0" : : "r"((unsigned long long)DEFAULT_FPCR));
++    return (uint32_t)game;
++}
++
++static inline void native_fpu_game(uint32_t game)
++{
++    __asm__ volatile("msr fpcr, %0" : : "r"((unsigned long long)game));
++}
++#elif defined(__SSE__)
+ static inline uint32_t native_fpu_host(void)
+ {
+     uint32_t game = __builtin_ia32_stmxcsr();
+diff --git a/engine/native/runner.c b/engine/native/runner.c
+index 5c9f34f..11e753c 100644
+--- a/engine/native/runner.c
++++ b/engine/native/runner.c
+@@ -162,7 +162,16 @@ static void map_domain(void)
+     native_threads_reserve();
+     /* x86's RET, which the P2 calls reach */
+     native_map(ret, P2_CALL_SIZE, "the P2 calls");
++#if defined(NATIVE_A64)
++    /* SonicAdventureRe-nx: AArch64's RET */
++    *(unsigned int *)ret = 0xd65f03c0U;
++    /* its line to the point of unification, then the instruction cache's, as
++     * __clear_cache would, without the library call the stubs can't place */
++    __asm__ volatile("dc cvau, %0\n\tdsb ish\n\tic ivau, %0\n\tdsb ish\n\tisb"
++                     : : "r"(ret) : "memory");
++#else
+     *(unsigned char *)ret = 0xc3;
++#endif
+     if (!code(ret, P2_CALL_SIZE)) {
+         unmapped("the P2 calls", ret);
+     }
+@@ -179,6 +188,19 @@ static void map_domain(void)
+ /* the game's FPSCR rounds toward zero and flushes a denormal result, as
+  * MXCSR's RC and FTZ do. DAZ stays clear, so a denormal operand keeps its
+  * value, as math.c's default build reads it */
++#if defined(NATIVE_A64)
++/* SonicAdventureRe-nx: FPCR's RMode (bits 23:22) 3 rounds toward zero, and FZ
++ * (bit 24) flushes denormals, a result's as FTZ does and an operand's too,
++ * which MXCSR leaves to DAZ */
++static void set_fpu(void)
++{
++    unsigned long long fpcr;
++
++    __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
++    fpcr |= (3ULL << 22) | (1ULL << 24);
++    __asm__ volatile("msr fpcr, %0" : : "r"(fpcr));
++}
++#else
+ static void set_fpu(void)
+ {
+     unsigned int csr = __builtin_ia32_stmxcsr();
+@@ -186,6 +208,7 @@ static void set_fpu(void)
+     csr &= ~MXCSR_DAZ;
+     __builtin_ia32_ldmxcsr(csr);
+ }
++#endif
+ 
+ void native_report(const char *why)
+ {
+diff --git a/engine/tools/asm2c.py b/engine/tools/asm2c.py
+index 0480e60..234e769 100644
+--- a/engine/tools/asm2c.py
++++ b/engine/tools/asm2c.py
+@@ -871,11 +871,14 @@ def write(path, program):
+     # and the float result is read where those calls leave it. Windows and
+     # every other processor pass them another way, so there such a JSR ends
+     # the run
+-    out += ['#if defined(__x86_64__) && !defined(_WIN32)',
++    # SonicAdventureRe-nx: AArch64's AAPCS64 gives each class its registers
++    # in order too (X0 to X7, V0 to V7), and returns a float in S0
++    out += ['#if (defined(__x86_64__) && !defined(_WIN32)) || defined(__aarch64__)',
+             '    uintptr_t r_ = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, float, float, float, float))'
+             'widened(target))(widened(R[4]), widened(R[5]), widened(R[6]), widened(R[7]), F.f[4], F.f[5], F.f[6], '
+             'F.f[7]);',
+-            '    __asm__ volatile("movss %%xmm0, %0" : "=m"(F.f[0]));', '    R[0] = (uint32_t)r_;',
++            '#if defined(__aarch64__)', '    __asm__ volatile("str s0, %0" : "=m"(F.f[0]));', '#else',
++            '    __asm__ volatile("movss %%xmm0, %0" : "=m"(F.f[0]));', '#endif', '    R[0] = (uint32_t)r_;',
+             '#else',
+             '    fprintf(stderr, "sa1: a JSR reached %#x, the game\'s C, which asm2c.py\'s C calls by x86-64\'s '
+             'System V convention alone: run it on such a host, or lift the function the JSR calls\\n", '
+diff --git a/engine/tools/stubs.py b/engine/tools/stubs.py
+index d9b6f65..67ef50d 100644
+--- a/engine/tools/stubs.py
++++ b/engine/tools/stubs.py
+@@ -195,7 +195,7 @@ def main(out, *args):
+     else:
+         for obj in objects:
+             run = subprocess.run(['readelf', '-rW', obj], capture_output=True, text=True, check=True)
+-            called.update(m[1] for m in re.finditer(r'R_(?:X86_64_PLT32|386_PLT32|386_PC32)\s+\S+\s+(\w+)',
++            called.update(m[1] for m in re.finditer(r'R_(?:X86_64_PLT32|386_PLT32|386_PC32|AARCH64_CALL26|AARCH64_JUMP26)\s+\S+\s+(\w+)',
+                                                     run.stdout))
+     ends = {WORK[image][0]: Config(image).span()[1] for image in WORK}
+     # a name the slice reads where COFF's library gives code is the game's
+@@ -223,7 +223,11 @@ def main(out, *args):
+         fail(*problems)
+     lines = ['/* the native slice\'s stubs, as engine/tools/stubs.py writes them */',
+              'void native_stub(const char *name);',
+-             '#define ZERO_FLOAT __asm__ volatile("xorps %%xmm0, %%xmm0" ::: "xmm0")', '']
++             # SonicAdventureRe-nx: AArch64's float return register is v0
++             '#if defined(NATIVE_A64) || defined(__aarch64__)',
++             '#define ZERO_FLOAT __asm__ volatile("movi d0, #0" ::: "v0")',
++             '#else',
++             '#define ZERO_FLOAT __asm__ volatile("xorps %%xmm0, %%xmm0" ::: "xmm0")', '#endif', '']
+     written = dict.fromkeys(KINDS, 0)
+     for name in missing:
+         # a row whose kind doesn't fit its name's use is one of problems, and the use decides what --explore writes
+diff --git a/events/shared/sdk/sscanf.c b/events/shared/sdk/sscanf.c
+index f3c0bd3..38ab7c7 100644
+--- a/events/shared/sdk/sscanf.c
++++ b/events/shared/sdk/sscanf.c
+@@ -5,6 +5,14 @@
+ 
+ int sscanf(const char *s, const char *format, ...)
+ {
++#ifdef NATIVE_A64
++    /* SonicAdventureRe-nx: an AArch64 build reads ... the Microsoft way, which
++     * only an ms_abi function may, and the C library's sscanf this one stands
++     * in for is not. Only the events' path editor, a debug tool, calls it */
++    (void)s;
++    (void)format;
++    return 0;
++#else
+     va_list args;
+     int count;
+ 
+@@ -12,4 +20,5 @@ int sscanf(const char *s, const char *format, ...)
+     count = _fmtin(1, NULL, s, format, args);
+     va_end(args);
+     return count;
++#endif
+ }
+diff --git a/sdk/include/mpdrv.h b/sdk/include/mpdrv.h
+index 8f45c25..76c162e 100644
+--- a/sdk/include/mpdrv.h
++++ b/sdk/include/mpdrv.h
+@@ -190,6 +190,9 @@ Sint32 mpdrv_exit(void);
+ /* in debug mode, format the text as vsprintf does and pass it to
+  * _mpdrv_dbg_out, unless that is NULL. the formatted text must fit 256 bytes,
+  * its NUL included */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void mpdrv_dpf(const char *format, ...);
+ /* addr as a physical address, its top four bits cleared, for the Maple DMA;
+  * mpdrv_p2v returns addr as it is */
+diff --git a/sdk/include/ninja.h b/sdk/include/ninja.h
+index aaa9fdb..aaa4888 100644
+--- a/sdk/include/ninja.h
++++ b/sdk/include/ninja.h
+@@ -271,6 +271,9 @@ void njPrintD(Int loc, Int val, Int digit);
+ void njPrintB(Int loc, Uint32 val, Int digit);
+ void njPrintH(Int loc, Uint32 val, Int digit);
+ void njPrintF(Int loc, Float val, Int digit);
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void njPrint(Int loc, const char *fmt, ...);
+ 
+ void njInitView(NJS_VIEW *v);
+diff --git a/sdk/include/sg_mwmng.h b/sdk/include/sg_mwmng.h
+index fb331b3..000b6b9 100644
+--- a/sdk/include/sg_mwmng.h
++++ b/sdk/include/sg_mwmng.h
+@@ -15,6 +15,9 @@ void mwMngFinish(void);
+  * buffer, and passes it to that function, if one is set. the message and its
+  * NUL must fit the buffer */
+ void mwMngEntryErrFn(void (*func)(void *obj, char *msg), void *obj);
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void mwMngError(const char *format, ...);
+ /* three tables of up to 16 functions, each called with the obj it was entered
+  * with, in table order. mwMngExecServer runs the server table, mwMngVsync the
+diff --git a/sdk/include/shinobi.h b/sdk/include/shinobi.h
+index c0b3dc7..a56a340 100644
+--- a/sdk/include/shinobi.h
++++ b/sdk/include/shinobi.h
+@@ -855,6 +855,9 @@ SDE_ERR sdSysFlushHostCmd(void);
+ void sdSysErrTrap(void *func, SDE_ERR err);
+ /* print through sdgPrintFunc, which sdDebugSetPrintFunc sets, while
+  * sdgDebugMode is true */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ int sdDebugPrintf(const char *format, ...);
+ int sdDebugPrint(const char *str);
+ int sdDebugSetPrintFunc(void (*func)(const char *str));
+@@ -961,6 +964,9 @@ SDE_ERR sdMidiPlay(SDMIDI handle, const Sint8 bank_num, const Sint8 data_num,
+  * sdMidiSendMes. the arguments after midi_mes are its data bytes: one for
+  * SDD_MIDI_PRG_CHG and SDD_MIDI_MONO_PRES, and two for any other channel
+  * message. a system message packs as four zeros */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ SDE_ERR sdMidiSetMes(SDMIDI handle, SDS_MIDI_MES *midi_mes_ptr,
+                      const Uint8 midi_mes, ...);
+ SDE_ERR sdMidiSetVol(SDMIDI handle, const Sint8 vol, const Sint32 fade_time);
+@@ -993,6 +999,9 @@ SDE_ERR sdPstmGetTotalSmpFrame(SDPSTM handle, const Sint8 target_ch,
+                                Uint32 *cur_smp_frame);
+ /* open a stream port of use_ch channels, 1 to SDD_PSTM_PORT_CH_MAX, whose
+  * driver channels follow as int arguments, each 0 to 15 */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ SDE_ERR sdPstmOpenPort(SDPSTM *handle, const Sint8 use_ch, ...);
+ /* start the port's stream at freq, a pitch word like those sdgFreqTable gives,
+  * with priority 0 to 15 */
+diff --git a/sdk/include/sofdec.h b/sdk/include/sofdec.h
+index 976b31c..f7f50d9 100644
+--- a/sdk/include/sofdec.h
++++ b/sdk/include/sofdec.h
+@@ -484,6 +484,9 @@ void ADXERR_Init(void);
+ void ADXERR_EntryErrFunc(void (*func)(void *obj, char *msg), void *obj);
+ /* format a message as fmt says and pass it to the function ADXERR_EntryErrFunc
+  * set */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void ADXERR_CallErrFunc(char *fmt, ...);
+ 
+ /* streams from the disc. a stream is stopped, reading, read to its end, or
+diff --git a/sdk/include/stdio.h b/sdk/include/stdio.h
+index 785f401..ce36ed2 100644
+--- a/sdk/include/stdio.h
++++ b/sdk/include/stdio.h
+@@ -25,6 +25,11 @@ typedef struct _iobuf {
+ /* these write s through _fmtout. runtime/print.h says where it departs from
+  * ISO C */
+ int sprintf(char *s, const char *format, ...);
++#ifdef NATIVE_A64
++/* SonicAdventureRe-nx: a va_list here is the Microsoft one, which
++ * engine/native/a64.c hands to the C library's vsprintf as AArch64's */
++#define vsprintf native_a64_vsprintf
++#endif
+ int vsprintf(char *s, const char *format, va_list args);
+ /* sscanf links only into the events. it reads s through _fmtin, and
+  * shared/sdk/scan.h says where that departs from ISO C */
+diff --git a/sdk/include/vmsfs.h b/sdk/include/vmsfs.h
+index 5eb6c97..915599b 100644
+--- a/sdk/include/vmsfs.h
++++ b/sdk/include/vmsfs.h
+@@ -161,6 +161,9 @@ Sint32 vmsfs_fgetsize(Sint32 drive, const char *fname);
+ Sint32 vmsfs_setwork(Sint32 drive, void *addr, Sint32 size);
+ extern void (*_vmsfs_dbg_out)(const char *str);
+ /* format a message and print it through _vmsfs_dbg_out, if set */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void vmsfs_dpf(const char *format, ...);
+ 
+ /* file system calls that read or write the card, which run on a drive's fiber
+diff --git a/src/debug/print.h b/src/debug/print.h
+index b43512f..50ce23e 100644
+--- a/src/debug/print.h
++++ b/src/debug/print.h
+@@ -7,6 +7,9 @@
+  * length. the text is formatted unchecked into one 1024-byte buffer, so it
+  * must fit in 1023 bytes. every call shares that buffer, so a call must not
+  * interrupt another */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ int debug_print(Int loc, const char *format, ...);
+ 
+ #endif
+diff --git a/src/draw/text.h b/src/draw/text.h
+index 9afe1f3..de21656 100644
+--- a/src/draw/text.h
++++ b/src/draw/text.h
+@@ -35,6 +35,9 @@ void text_print_hex(Int loc, Uint32 value, Int digits);
+ void text_print_float(Int loc, Float value, Int digits);
+ /* text_print the string vsprintf makes of format and its arguments, which
+  * must come to 127 characters at most */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void text_printf(Int loc, const char *format, ...);
+ 
+ #ifdef NONMATCHING
+diff --git a/src/event/play.h b/src/event/play.h
+index be5bc8d..b17ca33 100644
+--- a/src/event/play.h
++++ b/src/event/play.h
+@@ -197,7 +197,13 @@ void event_message_show(const char *text);
+ void event_message_wait(int steps, const char *text);
+ /* event_message_show and event_message_wait for formatted text. the text
+  * must fit in 127 bytes, since the formatter checks no bound */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void event_message_printf(const char *format, ...);
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void event_message_wait_printf(int steps, const char *format, ...);
+ /* event_message_close fades the window out and releases it.
+  * event_message_clear fades only its text out */
+diff --git a/src/system/bitmap.h b/src/system/bitmap.h
+index 1e413c3..7db4107 100644
+--- a/src/system/bitmap.h
++++ b/src/system/bitmap.h
+@@ -73,6 +73,9 @@ void bitmap_newline(struct bitmap *bitmap);
+ void bitmap_print(struct bitmap *bitmap, const char *text);
+ /* format into a 128-byte buffer, whose bounds go unchecked, and
+  * bitmap_print the result */
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ void bitmap_printf(struct bitmap *bitmap, const char *format, ...);
+ 
+ /* the same as bitmap_queue_add, which it calls */
+diff --git a/src/system/util.h b/src/system/util.h
+index c2f72d0..60f2df9 100644
+--- a/src/system/util.h
++++ b/src/system/util.h
+@@ -250,6 +250,9 @@ Bool world_sweep_ball_hit(NJS_POINT3 *pos, NJS_VECTOR *speed,
+  * the formatter's digit buffer. the result is the length written, less the
+  * null */
+ int string_vformat(char *buffer, const char *format, va_list args);
++#ifdef NATIVE_A64 /* SonicAdventureRe-nx: AArch64 builds pass ... the Microsoft way */
++__attribute__((ms_abi))
++#endif
+ int string_format(char *buffer, const char *format, ...);
+ 
+ #ifdef DREAMCAST

@@ -1,0 +1,3 @@
+#!/bin/sh
+# SonicAdventureRe-nx: binutils for the AArch64 build
+exec aarch64-linux-gnu-objcopy "$@"

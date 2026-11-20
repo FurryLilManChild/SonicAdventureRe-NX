@@ -1,0 +1,31 @@
+#!/bin/sh
+# SonicAdventureRe-nx: the decomp's NATIVE_CC (clang, found first on PATH) for an AArch64 Linux
+# build. Steps that read C (preprocess, dependencies, C to LLVM IR) stay x86-64, the only target
+# with 32-bit __ptr32 pointers, but read AArch64 glibc's headers so system structs have AArch64
+# layouts. Steps that make machine code (IR or C to objects, links, crt lookups) target AArch64.
+real=${A64_REAL_CLANG:-/usr/bin/clang}
+here=$(cd "$(dirname "$0")" && pwd)
+sysinc=${A64_SYSROOT:-/usr/aarch64-linux-gnu}/include
+front=0
+for a; do
+    case "$a" in
+        --version|-print-resource-dir) exec "$real" "$@" ;;
+        -emit-llvm|-E|-M|-MM) front=1 ;;
+    esac
+done
+if [ $front = 1 ]; then
+    exec "$real" -DNATIVE_A64 \
+    -D__builtin_va_list=__builtin_ms_va_list -D__builtin_va_start=__builtin_ms_va_start \
+    -D__builtin_va_end=__builtin_ms_va_end -D__builtin_va_copy=__builtin_ms_va_copy \
+    -mlong-double-64 -nostdlibinc -isystem "$here/include" -isystem "$sysinc" "$@"
+fi
+# x86-only flags have no meaning here
+n=$#
+while [ $n -gt 0 ]; do
+    a=$1; shift; n=$((n - 1))
+    case "$a" in
+        -mfma|-msse*|-mavx*|-mf16c|-mbmi*|-mlzcnt|-mpopcnt) ;;
+        *) set -- "$@" "$a" ;;
+    esac
+done
+exec "$real" --target=aarch64-linux-gnu -Wno-unused-command-line-argument "$@"

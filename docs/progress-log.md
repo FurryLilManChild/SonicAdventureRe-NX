@@ -2,6 +2,28 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-20: AArch64 Linux build reaches the same frames under qemu
+
+- `tools/a64/`: a `clang` wrapper (first on PATH; the decomp's NATIVE_CC is plain clang) and
+  binutils wrappers. Front-end steps (-E, -M, -emit-llvm) stay x86-64 for `__ptr32`, but read
+  AArch64 glibc's headers, with `-DNATIVE_A64 -mlong-double-64` (SH-4's long double is a double)
+  and the Microsoft va_list in place of SysV's. Steps that make code target aarch64-linux-gnu.
+  `NATIVE_LOWER` with `RETARGET=aarch64-unknown-linux-gnu` retargets every module (ref32_int now
+  also drops x86's target-cpu and target-features). `. tools/a64/env.sh` sets it all.
+- `patches/decomp/0002-aarch64.patch` (all under NATIVE_A64 or __aarch64__): FPCR in MXCSR's
+  place (round toward zero plus FZ; FZ also flushes operands, which MXCSR's DAZ leaves clear);
+  AArch64's RET for the P2 calls with an inline cache flush; the game's 14 variadic functions
+  `ms_abi` (tested alone: x86 IR with win64cc varargs, retargeted, sums 11 mixed int and double
+  arguments correctly on qemu-aarch64); `vsprintf` bridged to glibc's AArch64 va_list
+  (engine/native/a64.c); the events' sscanf (path editor only) returns 0; stubs.py reads
+  AArch64 call relocations and zeroes S0; asm2c.py's JSR into game C uses AAPCS64 (each class's
+  registers in order, as SysV).
+- Result: `build/engine/native/play` is an AArch64 ELF. Under `qemu-aarch64 -L
+  /usr/aarch64-linux-gnu`, Emerald Coast, 600 vsyncs: 396 frames, exit 0, and the whole log
+  (33 lines) identical to the x86 run's.
+- Not covered by that run: the pictures (no AArch64 Vulkan here), sound output, the variadic
+  functions' text on screen.
+
 ## 2026-11-20: references as integers (x86 proof), English mappings
 
 - `tools/ref32`: Gep32 (an opt plugin: getelementptr on a reference becomes i32 arithmetic with the
