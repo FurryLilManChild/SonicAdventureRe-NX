@@ -1,0 +1,48 @@
+diff --git a/engine/mk/native.mk b/engine/mk/native.mk
+index ac73be8..308e865 100644
+--- a/engine/mk/native.mk
++++ b/engine/mk/native.mk
+@@ -115,6 +115,10 @@ NATIVE_ARCH := $(if $(NATIVE_WINDOWS),--target=x86_64-w64-mingw32)
+ # with them; NATIVE_CHECK=--check refuses a pointer outside it
+ NATIVE_OPT ?= -O2
+ NATIVE_DOMAIN ?= 0
++# SonicAdventureRe-nx: NATIVE_LOWER, from the environment too, runs on each module's IR after
++# refs.py: the port's pass that retypes references as 32-bit integers (tools/ref32), so the IR no
++# longer needs x86's 32-bit pointers. Unset, it does nothing
++NATIVE_LOWER ?= true
+ NATIVE_CHECK ?=
+ NATIVE_REFS := --base $(NATIVE_DOMAIN) $(NATIVE_CHECK)
+ # NATIVE_EXPLORE=1, from the environment too, builds past what the slice's
+@@ -176,6 +180,7 @@ native_pass = $(NATIVE_CC) $(call native_pass_flags,$2,$3) $1 -E -MD -MP -MT $@
+ 	python3 engine/tools/marks.py mark $(NATIVE_TREE) $(@:.o=.i) && \
+ 	$(NATIVE_CC) $(call native_pass_flags,$2,$3) -S -emit-llvm -Xclang -disable-llvm-passes -o $(@:.o=.ll) $(@:.o=.i) && \
+ 	python3 engine/tools/refs.py $(@:.o=.ll) $(NATIVE_REFS) && \
++	$(NATIVE_LOWER) $(@:.o=.ll) && \
+ 	$(NATIVE_CC) $(call native_pass_flags,$2,$3) -c -o $@ $(@:.o=.ll)
+ NATIVE_GAME_INC := sdk/include $(addprefix $(NATIVE_TREE)/,src modules events) build/gen/src build/gen/modules \
+ 	build/gen/events build/gen/sdk
+@@ -294,6 +299,7 @@ $(NATIVE)/obj/engine/native/%.o: engine/native/%.c engine/tools/refs.py $(NATIVE
+ 	$(Q)$(NATIVE_CC) $(NATIVE_HOST_CFLAGS) -Wall -Wextra -Werror -Wno-microsoft-anon-tag -MD -MP -MT $@ \
+ 		-MF $(@:.o=.d) -S -emit-llvm -Xclang -disable-llvm-passes -o $(@:.o=.ll) $<
+ 	$(Q)python3 engine/tools/refs.py $(@:.o=.ll) --base $(NATIVE_DOMAIN) --host
++	$(Q)$(NATIVE_LOWER) $(@:.o=.ll)
+ 	$(Q)$(NATIVE_CC) $(NATIVE_HOST_CFLAGS) -w -c -o $@ $(@:.o=.ll)
+ # The movies' MPEG-1 decoder, pl_mpeg's one header, fetched at the commit
+ # tools/SHA256SUMS sums, under the MIT licence the header gives. It keeps the
+@@ -326,6 +332,7 @@ native_ninja = $(NATIVE_CC) $(NATIVE_SA1_CFLAGS) -E -MD -MP -MT $@ -MF $(@:.o=.d
+ 	$(NATIVE_CC) $(NATIVE_SA1_CFLAGS) $1 -Wno-unused-command-line-argument -S -emit-llvm -Xclang -disable-llvm-passes \
+ 		-o $(@:.o=.ll) $(@:.o=.i) && \
+ 	python3 engine/tools/refs.py $(@:.o=.ll) --base $(NATIVE_DOMAIN) --host && \
++	$(NATIVE_LOWER) $(@:.o=.ll) && \
+ 	$(NATIVE_CC) $(NATIVE_SA1_CFLAGS) -w -Wno-unused-command-line-argument -c -o $@ $(@:.o=.ll)
+ $(NATIVE)/obj/engine/sa1/%.o: engine/sa1/%.c $(NATIVE_PRELUDE) engine/tools/marks.py engine/tools/refs.py \
+ 		$(NATIVE_NEEDS) $(NATIVE_HEADERS)
+@@ -578,7 +585,7 @@ $(NATIVE)/obj/engine/native/runner.o $(NATIVE)/obj/engine/sa1/play.o: $(NATIVE)/
+ # it: each program's objects, the rest of the slice's and the game's own,
+ # then the libraries the host gives the game's link
+ NATIVE_REQUEST := $(strip host $(NATIVE_HOST) opt $(NATIVE_OPT) \
+-	domain $(NATIVE_DOMAIN) check $(NATIVE_CHECK) clang $(shell $(NATIVE_CC) --version 2> /dev/null) \
++	domain $(NATIVE_DOMAIN) check $(NATIVE_CHECK) lower $(NATIVE_LOWER) clang $(shell $(NATIVE_CC) --version 2> /dev/null) \
+ 	resource $(NATIVE_RESOURCE))
+ $(call record,$(NATIVE)/request.txt,$(NATIVE_REQUEST))
+ $(call record,$(NATIVE)/objects.txt,$(strip $(NATIVE_PROGRAM_OBJ) rest: $(NATIVE_REST_OBJ) play: $(NATIVE_PLAY_OBJ) \
