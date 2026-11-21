@@ -5,8 +5,9 @@
 
 Checks, each named in the output with PASS or FAIL:
   1. code holds no fixed address in the link window: no absolute relocation in code (mkimage
-     stops on those), and every MOVZ/MOVK of a 64-bit window-5 number is a packed table that is
-     shifted (an optimizer's switch table), not an address;
+     stops on those), and every MOV/MOVK of a 64-bit window-5 number is a packed switch table
+     (shifted) or two 32-bit fields stored at once (cargo_top_init: frame 0.0 and unk_08 5), never
+     a register used as an address;
   2. no module's lowered IR holds a number near the domain's marker (0x5a5a00000000,
      tools/a64/env-nx.sh): a domain address the lowering missed would be one. (The image's data
      can't tell: a table of 32-bit fields can hold 0x5a5a beside a 0. Words that read as window-5
@@ -61,22 +62,27 @@ def main():
     # 1. code
     dis = run('aarch64-linux-gnu-objdump', '-d', '--no-show-raw-insn', str(full)).splitlines()
     window_hi = link >> 32
-    bad, tables = [], 0
+    bad, tables, stores = [], 0, 0
     for k, l in enumerate(dis):
-        m = re.search(rf'\bmovk\s+(x\d+), #0x{window_hi:x}, lsl #32\b', l)
+        m = (re.search(rf'\bmovk\s+(x\d+), #0x{window_hi:x}, lsl #32\b', l) or
+             re.search(rf'\bmov\s+(x\d+), #0x{window_hi:x}[0-9a-f]{{8}}\b', l))
         if not m:
             continue
         reg = m.group(1)
+        after = dis[k + 1:k + 12]
         # a packed table is shifted by a register soon after: lsr/lsl/asr xD, <reg>, xS
-        shifted = any(re.search(rf'\b(lsr|lsl|asr)\s+[xw]\d+, {reg}, [xw]\d+', dis[j])
-                      for j in range(k + 1, min(k + 6, len(dis))))
-        if shifted:
+        if any(re.search(rf'\b(lsr|lsl|asr)\s+[xw]\d+, {reg}, [xw]\d+', a) for a in after[:5]):
             tables += 1
+        # two 32-bit fields stored at once (a value, then a 5): the register is only stored
+        elif any(re.search(rf'\b(str|stur|stp)\s+[^,]*\b{reg}\b', a) for a in after) and \
+                not any(re.search(rf'\b(ldr|ldur|ldrb|ldrh|str|stur|strb|strh)\s+[xwbhsdq]\d+, \[{reg}[],]', a) for a in after):
+            stores += 1
         else:
             bad.append(l.strip())
     check('1. no fixed window address in code', not bad,
           f'{len(bad)} instructions, first: {bad[0]}' if bad else
-          f'no absolute relocation in code (mkimage); {tables} packed switch tables in window 5\'s range, shifted, not addresses')
+          f'no absolute relocation in code (mkimage); window-5 numbers in code: {tables} packed switch tables '
+          f'(shifted) and {stores} merged stores of two 32-bit fields, not addresses (none used as one)')
 
     # 2. the marker, where it would show: the lowered IR of every module (the image's data can't
     #    tell, since a table of 32-bit fields can hold 0x5a5a beside a 0)
