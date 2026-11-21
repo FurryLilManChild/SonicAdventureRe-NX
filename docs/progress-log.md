@@ -2,6 +2,19 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-20: Switch Test 2 on the owner's Switch: the game runs, 396 frames, as on PC
+
+- Build 65f655e. Window 1 of 1 8-11 13-15. "code mapped again, executable at 0x1b0000000: 0":
+  the P2 page fix held. Stack guards still refused (0xd401), the run went on.
+- "sa1: done after 600 vsyncs: 396 frames, game_mode 4, stage 1 act 0, character 0", and all 33
+  sa1: lines (29 stubs with their vsyncs, the reports, texture memory 720/719/1116/0) identical to
+  the x86 PC run's run.txt.
+- Timing (stock clocks, headless, no rendering or pacing): 0 vsyncs at 4.1 s (setup, disc check,
+  symbols), 211 at 6.1 s, done at 7.6 s.
+- Exit path: _exit on the end's own stack, heartbeat stopped, report, 12 domain maps undone ok,
+  waited for +, left; the owner reports it returned cleanly. Test 1's black screen was this end screen
+  never reached, as the failure came before.
+
 ## 2026-11-20: Switch Test 1 on the owner's Switch, and Test 2's fixes
 
 - Test 1 (build 0c4589e), log: the loader chose window 4 of 4 5 6 8 9 10 14 15, moved 66,482
