@@ -2,6 +2,21 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: the port menu, and a second pause trace
+
+- Port menu (nx_menu.c, drawn by nx_overlay.c with a 5x7 font): Minus and + open it in place of
+  quitting. The game waits in the backend's pad read (patch 0006: sa_input_sample loops on the
+  host's native_menu_step) while the raster shows the last picture again each vsync with the menu
+  over it (Raster::again: the color target, or its fitted copy, blitted to a fresh swapchain image,
+  then the overlay). Sound goes quiet while it shows (the feed thread writes silence and leaves the
+  game's mixer alone). Items: resume, widescreen and 60 fps (the decomp's port_toggles, at once),
+  picture size and captures (next start), volume (the feed scales its samples), the frame counter,
+  quit (A twice). Each change rewrites settings.txt, which now carries volume and counter too.
+  The game never sees the + of the menu's chord, nor a + still held as the menu closes.
+- Pause trace, second form: every scan for 10 past a pause's end; every newly pressed Start the
+  window reports, with its pad read's number; and the 2D draws taken while paused (the link wraps
+  sa1_record_sprite, _screen_strip, _text and _triangles), summed at each pause's end.
+
 ## 2026-11-21: sound confirmed by ear
 
 - the owner: sound has worked in builds be54505 and 4ca411a (audout, the game's 44.1 kHz resampled

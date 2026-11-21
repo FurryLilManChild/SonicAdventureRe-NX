@@ -40,6 +40,7 @@ clang $CF -fno-pic -c switch/runtime/nx_posix_stubs.c -o "$B/nx_posix_stubs.o"
 clang $CF -fno-pic -c switch/runtime/nx_capture.c -o "$B/nx_capture.o"
 clang $CF -fno-pic -c switch/runtime/nx_overlay.c -o "$B/nx_overlay.o"
 clang $CF -fno-pic -c switch/runtime/nx_trace.c -o "$B/nx_trace.o"
+clang $CF -fno-pic -c switch/runtime/nx_menu.c -o "$B/nx_menu.o"
 clang --target=aarch64-none-elf -c switch/runtime/nx_base.S -o "$B/nx_base.o"
 
 echo "== the game's objects (the decomp's native slice, for Horizon)"
@@ -79,8 +80,8 @@ objects=$(printf '%s\n' $objects | sed "s|$N/obj/engine/native/runner.o|$B/runne
 
 echo "== the link, for window 5, with its relocations kept"
 aarch64-linux-gnu-ld -T switch/ld/image.ld --defsym=IMAGE_BASE=0x500400000 --defsym=syCacheICI_P2_=0x5b0000000 \
-    $aliases $wraps --wrap=_exit --wrap=exit --wrap=native_hook_pad_scan --wrap=native_hook_pad_scanned -no-pie -z now --build-id=none --emit-relocs -Map="$B/SonicAdventureRe-nx.map" \
-    "$GCC/crti.o" "$GCC/crtbegin.o" $objects "$B/nx_main.o" "$B/nx_domain.o" "$B/nx_libc.o" "$B/nx_base.o" "$B/nx_posix_stubs.o" "$B/nx_capture.o" "$B/nx_overlay.o" "$B/nx_trace.o" \
+    $aliases $wraps --wrap=_exit --wrap=exit --wrap=native_hook_pad_scan --wrap=native_hook_pad_scanned --wrap=sa1_record_sprite --wrap=sa1_record_screen_strip --wrap=sa1_record_text --wrap=sa1_record_triangles -no-pie -z now --build-id=none --emit-relocs -Map="$B/SonicAdventureRe-nx.map" \
+    "$GCC/crti.o" "$GCC/crtbegin.o" $objects "$B/nx_main.o" "$B/nx_domain.o" "$B/nx_libc.o" "$B/nx_base.o" "$B/nx_posix_stubs.o" "$B/nx_capture.o" "$B/nx_overlay.o" "$B/nx_trace.o" "$B/nx_menu.o" \
     -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" -L"$GCC" \
     --start-group "$NVK/lib/libvulkan.a" "$NVK/lib/libexpat.a" "$NVK/lib/libzstd.a" "$PORTLIBS/lib/libz.a" \
     -lstdc++ -lm -lnx -lc -lgcc -lsysbase --end-group "$GCC/crtend.o" "$GCC/crtn.o" \

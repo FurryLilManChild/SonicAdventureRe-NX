@@ -43,6 +43,7 @@ extern volatile unsigned long nx_sound_returned, nx_sound_waits_empty;
 double nx_capture_copy_ms(void);
 extern int nx_capture_wide;
 extern int nx_capture_enabled;
+extern int nx_volume, nx_resolution, nx_settings_capture, nx_overlay_on;
 extern volatile int nx_overlay_fps;
 
 // the clocks now, in MHz: CPU, GPU, memory (sys-clk can change them during a run)
@@ -205,7 +206,10 @@ static const char default_settings[] =
     "# the picture's size: 1 is the Dreamcast's 640x480, 2 is twice that, 0 fits the screen\n"
     "resolution 1\n"
     "# the port's captures for Claude (stick clicks): 1 on, 0 off; on costs speed\n"
-    "capture 0\n";
+    "capture 0\n"
+    "# the port's own: sound volume in percent, the frame counter 1 on 0 off\n"
+    "volume 100\n"
+    "counter 1\n";
 
 // the settings in force, logged whole (so a change is seen applied), and whether they ask for
 // 16:9 (the captures stretch to it)
@@ -240,7 +244,13 @@ static void settings_log(const char *path)
             if (!strcmp(name, "aspect"))
                 nx_capture_wide = !strcmp(value, "16:9");
             if (!strcmp(name, "capture"))
-                nx_capture_enabled = !strcmp(value, "1");
+                nx_settings_capture = nx_capture_enabled = !strcmp(value, "1");
+            if (!strcmp(name, "resolution"))
+                nx_resolution = atoi(value);
+            if (!strcmp(name, "volume"))
+                nx_volume = atoi(value);
+            if (!strcmp(name, "counter"))
+                nx_overlay_on = atoi(value) != 0;
         }
     }
     fclose(f);

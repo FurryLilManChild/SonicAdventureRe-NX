@@ -1,21 +1,24 @@
 --- a/engine/pc/raster.cpp
 +++ b/engine/pc/raster.cpp
-@@ -27,6 +27,14 @@
+@@ -27,6 +27,17 @@
   * would call a missing initializer */
  #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
  
 +/* a host's overlay over the window, where it gives one (SonicAdventureRe-nx's
 + * frame counter on the Switch): called once a picture shown, it gives RGBA
 + * pixels of width by height, gray, so either byte order shows them alike, and
-+ * where they go from the region's top left. null shows none */
++ * where they go from the region's top left, given the region's size. null
++ * shows none */
 +extern "C" const uint8_t *native_overlay(uint32_t &width, uint32_t &height,
-+                                         int32_t &x, int32_t &y)
++                                         int32_t &x, int32_t &y,
++                                         uint32_t region_width,
++                                         uint32_t region_height)
 +    __attribute__((weak));
 +
  namespace pc {
  
  namespace {
-@@ -225,6 +233,7 @@
+@@ -225,6 +236,7 @@
      Buffer vertices;
      Buffer readback;
      Buffer stats; /* the fragments' head as the picture left it */
@@ -23,7 +26,58 @@
  };
  
  /* the words of the fragments' head, as the shaders' Fragments holds them,
-@@ -1622,6 +1631,7 @@
+@@ -494,8 +506,50 @@
+                  VkAccessFlags src, VkAccessFlags dst,
+                  VkPipelineStageFlags src_stage,
+                  VkPipelineStageFlags dst_stage);
++    /* copy the host's overlay, where it gives one, onto image to (in
++     * TRANSFER_DST_OPTIMAL) at its place in region shows, through f's
++     * overlay buffer */
++    void overlay_onto(VkCommandBuffer c, Frame &f, VkImage to,
++                      const VkRect2D &shows);
+ };
+ 
++void Raster::Impl::overlay_onto(VkCommandBuffer c, Frame &f, VkImage to,
++                                const VkRect2D &shows)
++{
++    uint32_t ow = 0, oh = 0;
++    int32_t ox = 0, oy = 0;
++    const uint8_t *over =
++        native_overlay ? native_overlay(ow, oh, ox, oy, shows.extent.width,
++                                        shows.extent.height)
++                       : nullptr;
++    std::string lost;
++    constexpr VkDeviceSize most = 640 * 480 * 4;
++
++    if (over == nullptr || ow == 0 || oh == 0 || ox < 0 || oy < 0 ||
++        ox + static_cast<int64_t>(ow) > shows.extent.width ||
++        oy + static_cast<int64_t>(oh) > shows.extent.height ||
++        static_cast<VkDeviceSize>(ow) * oh * 4 > most) {
++        return;
++    }
++    if (f.overlay.buffer == VK_NULL_HANDLE &&
++        !make_buffer(f.overlay, most, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
++                     lost)) {
++        return;
++    }
++    VkBufferImageCopy place{};
++
++    memcpy(f.overlay.mapped, over, static_cast<size_t>(ow) * oh * 4);
++    barrier(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 1,
++            VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
++            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
++    place.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
++    place.imageOffset = {shows.offset.x + ox, shows.offset.y + oy, 0};
++    place.imageExtent = {ow, oh, 1};
++    vk.vkCmdCopyBufferToImage(c, f.overlay.buffer, to,
++                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &place);
++}
++
+ uint32_t Raster::Impl::memory_type(uint32_t bits,
+                                    VkMemoryPropertyFlags want) const
+ {
+@@ -1622,6 +1676,7 @@
              r.free_buffer(f.vertices);
              r.free_buffer(f.readback);
              r.free_buffer(f.stats);
@@ -31,39 +85,196 @@
          }
          vk.vkDestroyQueryPool(r.device, r.timer, nullptr);
          for (auto &p : r.pipelines) {
-@@ -2475,6 +2485,35 @@
+@@ -2475,6 +2530,7 @@
          vk.vkCmdBlitImage(
              c, fitted ? r.fitted.image : r.color, VK_IMAGE_LAYOUT_GENERAL, to,
              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-+        uint32_t ow = 0, oh = 0;
-+        int32_t ox = 0, oy = 0;
-+        const uint8_t *over =
-+            native_overlay ? native_overlay(ow, oh, ox, oy) : nullptr;
-+        std::string lost;
-+
-+        if (over != nullptr && ow != 0 && oh != 0 &&
-+            ox + static_cast<int64_t>(ow) <= shows.extent.width &&
-+            oy + static_cast<int64_t>(oh) <= shows.extent.height &&
-+            (f.overlay.buffer != VK_NULL_HANDLE ||
-+             r.make_buffer(f.overlay, 256 * 64 * 4,
-+                           VK_BUFFER_USAGE_TRANSFER_SRC_BIT, lost)) &&
-+            static_cast<VkDeviceSize>(ow) * oh * 4 <= f.overlay.size) {
-+            VkBufferImageCopy place{};
-+
-+            memcpy(f.overlay.mapped, over, static_cast<size_t>(ow) * oh * 4);
-+            r.barrier(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-+                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 1,
-+                      VK_ACCESS_TRANSFER_WRITE_BIT,
-+                      VK_ACCESS_TRANSFER_WRITE_BIT,
-+                      VK_PIPELINE_STAGE_TRANSFER_BIT,
-+                      VK_PIPELINE_STAGE_TRANSFER_BIT);
-+            place.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-+            place.imageOffset = {shows.offset.x + ox, shows.offset.y + oy, 0};
-+            place.imageExtent = {ow, oh, 1};
-+            vk.vkCmdCopyBufferToImage(c, f.overlay.buffer, to,
-+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-+                                      &place);
-+        }
++        r.overlay_onto(c, f, to, shows);
          r.barrier(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, 1,
                    VK_ACCESS_TRANSFER_WRITE_BIT, 0,
+@@ -2522,6 +2578,129 @@
+     }
+     return true;
+ }
++
++bool Raster::again(uint32_t frame, std::string &why)
++{
++    Impl &r = *impl_;
++    Calls &vk = r.vk;
++    Frame &f = r.frames[frame];
++    uint32_t swap_image = UINT32_MAX;
++
++    if (!r.broken.empty()) {
++        why = r.broken;
++        return false;
++    }
++    if (r.window == nullptr || r.swapchain == VK_NULL_HANDLE) {
++        why = "no window to show it in";
++        return false;
++    }
++    if (f.sent && !r.waited(f.fence, why)) {
++        return false;
++    }
++    f.sent = false;
++    if (!r.took(vk.vkResetFences(r.device, 1, &f.fence), "vkResetFences",
++                why)) {
++        return false;
++    }
++    VkResult got =
++        vk.vkAcquireNextImageKHR(r.device, r.swapchain, UINT64_MAX, f.acquired,
++                                 VK_NULL_HANDLE, &swap_image);
++    if (got == VK_ERROR_OUT_OF_DATE_KHR) {
++        /* the fence stays unsignaled with nothing sent: send an empty
++         * submit so the slot's next wait returns */
++        VkSubmitInfo none{VK_STRUCTURE_TYPE_SUBMIT_INFO};
++        if (!r.make_swapchain(why) ||
++            !r.took(vk.vkQueueSubmit(r.queue, 1, &none, f.fence),
++                    "vkQueueSubmit", why)) {
++            return r.breaks(why);
++        }
++        f.sent = true;
++        return true;
++    }
++    if (got != VK_SUBOPTIMAL_KHR &&
++        !r.took(got, "vkAcquireNextImageKHR", why)) {
++        return false;
++    }
++    VkCommandBufferBeginInfo start{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
++    VkCommandBuffer c = f.commands;
++
++    start.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
++    if (!r.took(vk.vkBeginCommandBuffer(c, &start), "vkBeginCommandBuffer",
++                why)) {
++        return r.breaks(why);
++    }
++    VkMemoryBarrier all{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
++    all.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
++    all.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
++    vk.vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
++                            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &all, 0,
++                            nullptr, 0, nullptr);
++    VkImage to = r.swap_images[swap_image];
++    VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
++    VkClearColorValue black{};
++    r.barrier(c, to, VK_IMAGE_LAYOUT_UNDEFINED,
++              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 1, 0,
++              VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
++              VK_PIPELINE_STAGE_TRANSFER_BIT);
++    vk.vkCmdClearColorImage(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++                            &black, 1, &range);
++    r.barrier(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 1,
++              VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
++              VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
++    /* the last picture lies in the color target (or its fitted copy, the
++     * area filter already run), as the last submit left it */
++    VkRect2D shows = r.region();
++    bool fitted = r.fitted.image != VK_NULL_HANDLE;
++    VkExtent2D from = fitted ? r.fitted.extent : r.target;
++    VkImageBlit blit{};
++    blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
++    blit.srcOffsets[1] = {static_cast<int32_t>(from.width),
++                          static_cast<int32_t>(from.height), 1};
++    blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
++    blit.dstOffsets[0] = {shows.offset.x, shows.offset.y, 0};
++    blit.dstOffsets[1] = {
++        shows.offset.x + static_cast<int32_t>(shows.extent.width),
++        shows.offset.y + static_cast<int32_t>(shows.extent.height), 1};
++    vk.vkCmdBlitImage(c, fitted ? r.fitted.image : r.color,
++                      VK_IMAGE_LAYOUT_GENERAL, to,
++                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
++                      VK_FILTER_LINEAR);
++    r.overlay_onto(c, f, to, shows);
++    r.barrier(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++              VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, 1,
++              VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
++              VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
++    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
++    VkPipelineStageFlags waits = VK_PIPELINE_STAGE_TRANSFER_BIT;
++    submit.commandBufferCount = 1;
++    submit.pCommandBuffers = &c;
++    submit.waitSemaphoreCount = 1;
++    submit.pWaitSemaphores = &f.acquired;
++    submit.pWaitDstStageMask = &waits;
++    submit.signalSemaphoreCount = 1;
++    submit.pSignalSemaphores = &r.rendered[swap_image];
++    if (!r.took(vk.vkEndCommandBuffer(c), "vkEndCommandBuffer", why) ||
++        !r.took(vk.vkQueueSubmit(r.queue, 1, &submit, f.fence), "vkQueueSubmit",
++                why)) {
++        return r.breaks(why);
++    }
++    f.sent = true;
++    VkPresentInfoKHR show{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
++    show.waitSemaphoreCount = 1;
++    show.pWaitSemaphores = &r.rendered[swap_image];
++    show.swapchainCount = 1;
++    show.pSwapchains = &r.swapchain;
++    show.pImageIndices = &swap_image;
++    VkResult shown = vk.vkQueuePresentKHR(r.queue, &show);
++    if (shown == VK_ERROR_OUT_OF_DATE_KHR || shown == VK_SUBOPTIMAL_KHR) {
++        return r.make_swapchain(why);
++    }
++    if (!r.took(shown, "vkQueuePresentKHR", why)) {
++        return r.breaks(why);
++    }
++    return true;
++}
+ 
+ void Raster::wide(bool on)
+ {
+--- a/engine/pc/raster.h
++++ b/engine/pc/raster.h
+@@ -143,6 +143,10 @@
+                 const std::vector<Vertex> &vertices,
+                 const std::vector<Batch> &batches, bool sorted,
+                 std::string &why);
++    /* show the picture frame last drew again, with the host's overlay over
++     * it, through frame's slot, which it waits for first: a host's menu
++     * over a held game (SonicAdventureRe-nx). false with why where it can't */
++    bool again(uint32_t frame, std::string &why);
+     /* show the pictures from the next submit at 16:9 where on, else at 4:3.
+      * a window shows them in its largest centered rectangle of that aspect.
+      * the picture keeps its WIDTH by HEIGHT coordinates */
+--- a/engine/pc/backend.cpp
++++ b/engine/pc/backend.cpp
+@@ -10,7 +10,9 @@
+ #include <time.h>
+ 
+ #include <new>
++#include <chrono>
+ #include <string>
++#include <thread>
+ #include <type_traits>
+ 
+ #include "ninja.h"
+@@ -722,6 +724,11 @@
+     return result;
+ }
+ 
++/* a host's own menu over the held game (SonicAdventureRe-nx's port menu):
++ * while it gives 1, the game waits here and the last picture shows again
++ * each vsync with the host's overlay over it */
++extern "C" int native_menu_step(void) __attribute__((weak));
++
+ sa_result sa_input_sample(sa_engine *engine, uint32_t port, sa_pad *pad)
+ {
+     if (engine == nullptr || pad == nullptr) {
+@@ -737,6 +744,17 @@
+         b.quit_sent = true;
+         post(*engine, SA_EVENT_QUIT, SA_NULL, 0, engine->tick);
+     }
++    if (native_menu_step) {
++        while (native_menu_step()) {
++            std::string why;
++
++            if (!b.raster.again(b.last_frame, why)) {
++                fprintf(stderr, "menu: the picture can't show again: %s\n",
++                        why.c_str());
++                std::this_thread::sleep_for(std::chrono::milliseconds(16));
++            }
++        }
++    }
+     return pc::window_pad(b.window, port, *pad);
+ }
+ 

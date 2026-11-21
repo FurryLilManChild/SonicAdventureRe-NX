@@ -6,7 +6,7 @@
 // Switch's B, its B (right) is A, its X (left) is Y and its Y (top) is X. Start is +. ZL and ZR
 // (and L and R) are the analog triggers, full or nothing. The left stick is the Dreamcast's stick,
 // squared (a stick's round reach stretched to the square a Dreamcast pad reaches), and the d-pad
-// moves it too, as the PC build does. Minus and + together end the game. The stick clicks are
+// moves it too, as the PC build does. Minus and + together open the port menu (nx_menu.c). The stick clicks are
 // the port's captures (nx_capture.c): right, a picture; left, the last 2 seconds.
 #include "window.h"
 
@@ -30,6 +30,11 @@ extern "C" PFN_vkVoidFunction vkGetInstanceProcAddr(VkInstance instance, const c
 // nx_capture.c: a stick click asks for a capture (1 a picture, 2 a replay)
 extern "C" volatile int nx_capture_request;
 extern "C" int nx_capture_enabled;
+// the port menu (nx_menu.c)
+extern "C" volatile int nx_menu_open, nx_menu_request, nx_menu_quit;
+extern "C" int nx_volume;
+// the pause trace (nx_trace.c): newly pressed Start as the window reports it
+extern "C" void nx_trace_start_pressed(unsigned long read, uint32_t held, uint32_t press);
 
 // the sound thread's progress, for the heartbeat (nx_main.c): loops run, pieces rendered and
 // queued, and the voice's played samples
@@ -94,6 +99,9 @@ int16_t dc_axis(float v)
 
 } // namespace
 
+struct Window;
+static Window *the_window;
+
 struct Window {
     PadState pad;
     uint32_t held; // the last sample's, which press and release differ from
@@ -128,6 +136,7 @@ Window *window_open(const char *title, uint32_t width, uint32_t height, uint32_t
         why = "no memory for the window";
         return nullptr;
     }
+    the_window = w;
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&w->pad);
     padUpdate(&w->pad);
@@ -209,11 +218,38 @@ bool window_pump(Window *window)
             fprintf(stderr, "nx: capture: a stick click, but captures are off this run (capture 0)\n");
         }
     }
-    if ((held & HidNpadButton_Minus) && (held & HidNpadButton_Plus)) {
-        fprintf(stderr, "nx: Minus and + held: ending the game\n");
+    if (nx_menu_quit) {
+        fprintf(stderr, "nx: quit chosen in the port menu: ending the game\n");
         return true;
     }
+    if ((held & HidNpadButton_Minus) && (held & HidNpadButton_Plus) && !nx_menu_open && !nx_menu_request) {
+        fprintf(stderr, "nx: Minus and + held: the port menu opens\n");
+        nx_menu_request = 1;
+    }
     return false;
+}
+
+// a Start the game must not see: + held with Minus (the menu's chord), and + still held as the
+// menu closes, until it is let go
+static bool start_swallowed;
+static bool menu_was_open;
+static unsigned long pad_reads;
+
+extern "C" int nx_window_buttons(u64 *down, u64 *held);
+
+// the port menu's buttons: the pad updated, newly pressed and held; 1 where the system asks the
+// program to end
+extern "C" int nx_window_buttons(u64 *down, u64 *held)
+{
+    *down = *held = 0;
+    if (!appletMainLoop())
+        return 1;
+    if (the_window == nullptr)
+        return 0;
+    padUpdate(&the_window->pad);
+    *down = padGetButtonsDown(&the_window->pad);
+    *held = padGetButtons(&the_window->pad);
+    return 0;
 }
 
 sa_result window_pad(Window *window, uint32_t port, sa_pad &pad)
@@ -222,7 +258,20 @@ sa_result window_pad(Window *window, uint32_t port, sa_pad &pad)
         return SA_EMPTY;
     if (!padIsConnected(&window->pad))
         return SA_EMPTY;
-    const u64 b = padGetButtons(&window->pad);
+    u64 b = padGetButtons(&window->pad);
+    pad_reads++;
+    if (nx_menu_open || menu_was_open != (bool)nx_menu_open) {
+        menu_was_open = nx_menu_open;
+        start_swallowed = true;
+    }
+    if (b & HidNpadButton_Minus)
+        start_swallowed = true;
+    if (start_swallowed) {
+        if (b & HidNpadButton_Plus)
+            b &= ~(u64)HidNpadButton_Plus;
+        else
+            start_swallowed = false;
+    }
     uint32_t held = 0;
     held |= (b & HidNpadButton_B) ? PAD_A : 0;
     held |= (b & HidNpadButton_A) ? PAD_B : 0;
@@ -257,6 +306,8 @@ sa_result window_pad(Window *window, uint32_t port, sa_pad &pad)
 
     pad.on = held;
     pad.press = held & ~window->held;
+    if (pad.press & PAD_START)
+        nx_trace_start_pressed(pad_reads, held, pad.press);
     pad.release = window->held & ~held;
     window->held = held;
     return SA_OK;
@@ -302,7 +353,18 @@ void resampled(Window *w, int16_t *out, int frames)
 
 void fill_and_queue(Window *w, AudioOutBuffer *p)
 {
-    resampled(w, static_cast<int16_t *>(p->buffer), PIECE);
+    int16_t *samples = static_cast<int16_t *>(p->buffer);
+    if (nx_menu_open) {
+        // the menu holds the game: quiet, and the game's sound waits where it was
+        memset(samples, 0, PIECE * 2 * sizeof(int16_t));
+    } else {
+        resampled(w, samples, PIECE);
+        if (nx_volume < 100) {
+            const int v = nx_volume < 0 ? 0 : nx_volume;
+            for (int i = 0; i < PIECE * 2; i++)
+                samples[i] = (int16_t)(samples[i] * v / 100);
+        }
+    }
     p->data_size = PIECE * 2 * sizeof(int16_t);
     p->data_offset = 0;
     armDCacheFlush(p->buffer, p->buffer_size);
