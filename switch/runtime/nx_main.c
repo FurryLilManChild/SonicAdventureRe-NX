@@ -38,6 +38,28 @@ static Thread beat;
 static int beat_running;
 
 void native_report_state(FILE *stream);
+extern volatile unsigned long nx_sound_loops, nx_sound_pieces, nx_sound_played, nx_sound_started;
+double nx_capture_copy_ms(void);
+extern int nx_capture_wide;
+
+// the clocks now, in MHz: CPU, GPU, memory (sys-clk can change them during a run)
+static void clocks(u32 mhz[3])
+{
+    mhz[0] = mhz[1] = mhz[2] = 0;
+    if (R_FAILED(clkrstInitialize()))
+        return;
+    const PcvModuleId mods[3] = {PcvModuleId_CpuBus, PcvModuleId_GPU, PcvModuleId_EMC};
+    for (int i = 0; i < 3; i++) {
+        ClkrstSession s;
+        if (R_SUCCEEDED(clkrstOpenSession(&s, mods[i], 3))) {
+            u32 hz = 0;
+            clkrstGetClockRate(&s, &hz);
+            mhz[i] = hz / 1000000;
+            clkrstCloseSession(&s);
+        }
+    }
+    clkrstExit();
+}
 
 // a line to the log (stderr is the SD card's file)
 static void line(const char *fmt, ...)
@@ -65,8 +87,15 @@ static void heartbeat(void *arg)
         if (game_done)
             break;
         unsigned long v = native_vsyncs;
-        fprintf(stderr, "[heartbeat] %.1f s: %lu vsyncs, %.1f a second%s\n", seconds(), v,
-                last == ~0UL ? 0.0 : (v - last) / 5.0, v == last ? " (no progress since the last beat)" : "");
+        u32 mhz[3];
+        clocks(mhz);
+        fprintf(stderr,
+                "[heartbeat] %.1f s: %lu vsyncs, %.1f a second%s; clocks %u/%u/%u MHz; sound: thread %s, %lu loops, "
+                "%lu pieces, %lu samples played; replay copy %.2f ms a picture\n",
+                seconds(), v, last == ~0UL ? 0.0 : (v - last) / 5.0,
+                v == last ? " (no progress since the last beat)" : "", mhz[0], mhz[1], mhz[2],
+                nx_sound_started ? "running" : "NOT STARTED", nx_sound_loops, nx_sound_pieces, nx_sound_played,
+                nx_capture_copy_ms());
         last = v;
     }
 }
@@ -161,15 +190,53 @@ __asm__(".text\n"
 // the settings the first run writes: the game's own defaults, said out loud, so they can be changed
 static const char default_settings[] =
     "# SonicAdventureRe-nx settings (the decomp's own: name value, # starts a note)\n"
+    "# the port's own defaults: 16:9 at 60 fps\n"
     "disc " DIR "/disc\n"
     "# 4:3 or 16:9\n"
-    "aspect 4:3\n"
+    "aspect 16:9\n"
     "# 30 (the game's own) or 60\n"
-    "fps 30\n"
+    "fps 60\n"
     "vsync 1\n"
     "sound 1\n"
     "# the picture's size: 1 is the Dreamcast's 640x480, 2 is twice that, 0 fits the screen\n"
     "resolution 1\n";
+
+// the settings in force, logged whole (so a change is seen applied), and whether they ask for
+// 16:9 (the captures stretch to it)
+static void settings_log(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return;
+    char text[256];
+    line("settings (%s):\n", path);
+    while (fgets(text, sizeof text, f)) {
+        char *note = strchr(text, '#');
+        if (note)
+            *note = 0;
+        // no sscanf: the game's C brings its own (events/shared/sdk), which the link may pick
+        char name[32] = "", value[200] = "";
+        char *p = text + strspn(text, " \t\r\n");
+        size_t n = strcspn(p, " \t\r\n");
+        if (n && n < sizeof name) {
+            memcpy(name, p, n);
+            name[n] = 0;
+            p += n;
+            p += strspn(p, " \t");
+            size_t m = strcspn(p, " \t\r\n");
+            if (m < sizeof value) {
+                memcpy(value, p, m);
+                value[m] = 0;
+            }
+        }
+        if (name[0] && value[0]) {
+            line("  %s %s\n", name, value);
+            if (!strcmp(name, "aspect"))
+                nx_capture_wide = !strcmp(value, "16:9");
+        }
+    }
+    fclose(f);
+}
 
 static void settings_exist(const char *path)
 {
@@ -198,23 +265,12 @@ int main(int argc, char **argv)
     line("\n== SonicAdventureRe-nx (build %s): the game, in a window (Vulkan, NVK)\n", NX_BUILD);
     line("image at %p in window %p (linked for %p)\n", (void *)__start__, (void *)native_domain_base,
          (void *)nx_link_window_number);
-    u64 clk[3] = {0};
-    if (R_SUCCEEDED(clkrstInitialize())) {
-        const PcvModuleId mods[3] = {PcvModuleId_CpuBus, PcvModuleId_GPU, PcvModuleId_EMC};
-        for (int i = 0; i < 3; i++) {
-            ClkrstSession s;
-            if (R_SUCCEEDED(clkrstOpenSession(&s, mods[i], 3))) {
-                u32 hz = 0;
-                clkrstGetClockRate(&s, &hz);
-                clk[i] = hz;
-                clkrstCloseSession(&s);
-            }
-        }
-        clkrstExit();
-    }
-    line("clocks: CPU %lu MHz, GPU %lu MHz, memory %lu MHz; %s\n", clk[0] / 1000000, clk[1] / 1000000,
-         clk[2] / 1000000, appletGetOperationMode() == AppletOperationMode_Console ? "docked" : "handheld");
+    u32 clk[3];
+    clocks(clk);
+    line("clocks: CPU %u MHz, GPU %u MHz, memory %u MHz; %s\n", clk[0], clk[1], clk[2],
+         appletGetOperationMode() == AppletOperationMode_Console ? "docked" : "handheld");
     settings_exist(DIR "/settings.txt");
+    settings_log(DIR "/settings.txt");
     if (R_SUCCEEDED(threadCreate(&beat, heartbeat, NULL, NULL, 0x4000, 0x2b, -2))) {
         threadStart(&beat);
         beat_running = 1;

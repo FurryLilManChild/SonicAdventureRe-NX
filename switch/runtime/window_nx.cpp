@@ -6,7 +6,8 @@
 // Switch's B, its B (right) is A, its X (left) is Y and its Y (top) is X. Start is +. ZL and ZR
 // (and L and R) are the analog triggers, full or nothing. The left stick is the Dreamcast's stick,
 // squared (a stick's round reach stretched to the square a Dreamcast pad reaches), and the d-pad
-// moves it too, as the PC build does. Minus and + together end the game.
+// moves it too, as the PC build does. Minus and + together end the game. The stick clicks are
+// the port's captures (nx_capture.c): right, a picture; left, the last 2 seconds.
 #include "window.h"
 
 #include <malloc.h>
@@ -26,6 +27,14 @@
 #include "sa_pc.h"
 
 extern "C" PFN_vkVoidFunction vkGetInstanceProcAddr(VkInstance instance, const char *name);
+// nx_capture.c: a stick click asks for a capture (1 a picture, 2 a replay)
+extern "C" volatile int nx_capture_request;
+
+// the sound thread's progress, for the heartbeat (nx_main.c): loops run, pieces rendered and
+// queued, and the voice's played samples
+extern "C" {
+volatile unsigned long nx_sound_loops, nx_sound_pieces, nx_sound_played, nx_sound_started;
+}
 
 namespace pc {
 
@@ -188,6 +197,11 @@ bool window_pump(Window *window)
         return false;
     padUpdate(&window->pad);
     const u64 held = padGetButtons(&window->pad);
+    const u64 down = padGetButtonsDown(&window->pad);
+    if (down & HidNpadButton_StickR)
+        nx_capture_request |= 1;
+    if (down & HidNpadButton_StickL)
+        nx_capture_request |= 2;
     if ((held & HidNpadButton_Minus) && (held & HidNpadButton_Plus)) {
         fprintf(stderr, "nx: Minus and + held: ending the game\n");
         return true;
@@ -248,10 +262,14 @@ sa_result window_rumble(Window *, uint32_t, uint16_t, uint16_t, uint32_t, uint32
 
 namespace {
 
-// the sound's thread: each piece the renderer has played is rendered again and queued
+// the sound's thread: each piece the renderer has played is rendered again and queued. It
+// sleeps 5 ms between looks (a piece lasts 23 ms) rather than wait on the renderer's frame event
 void feed(void *arg)
 {
     Window *w = static_cast<Window *>(arg);
+    nx_sound_started = 1;
+    fprintf(stderr, "nx: sound thread running\n");
+    bool logged_update = false;
     while (!w->sound_stop) {
         for (int i = 0; i < PIECES; i++) {
             AudioDriverWaveBuf &p = w->pieces[i];
@@ -259,12 +277,22 @@ void feed(void *arg)
                 continue;
             w->render(w->user, p.data_pcm16, PIECE);
             armDCacheFlush(p.data_pcm16, PIECE_BYTES);
-            audrvVoiceAddWaveBuf(&w->driver, 0, &p);
+            if (!audrvVoiceAddWaveBuf(&w->driver, 0, &p) && !logged_update) {
+                fprintf(stderr, "nx: sound: audrvVoiceAddWaveBuf refused a piece\n");
+                logged_update = true;
+            }
+            nx_sound_pieces++;
         }
         if (!audrvVoiceIsPlaying(&w->driver, 0))
             audrvVoiceStart(&w->driver, 0);
-        audrvUpdate(&w->driver);
-        audrenWaitFrame();
+        Result rc = audrvUpdate(&w->driver);
+        if (R_FAILED(rc) && !logged_update) {
+            fprintf(stderr, "nx: sound: audrvUpdate failed: %#x\n", rc);
+            logged_update = true;
+        }
+        nx_sound_played = audrvVoiceGetPlayedSampleCount(&w->driver, 0);
+        nx_sound_loops++;
+        svcSleepThread(5000000);
     }
 }
 
@@ -301,8 +329,9 @@ bool window_sound_open(Window *window, SoundRender render, void *user, std::stri
     audrvMemPoolAttach(&window->driver, pool);
     static const u8 sink_channels[] = {0, 1};
     audrvDeviceSinkAdd(&window->driver, AUDREN_DEFAULT_DEVICE_NAME, 2, sink_channels);
-    audrvUpdate(&window->driver);
-    audrenStartAudioRenderer();
+    rc = audrvUpdate(&window->driver);
+    Result started = audrenStartAudioRenderer();
+    fprintf(stderr, "nx: sound: memory pool %d, first update %#x, renderer start %#x\n", pool, rc, started);
 
     audrvVoiceInit(&window->driver, 0, 2, PcmFormat_Int16, SA_PC_SOUND_RATE);
     audrvVoiceSetDestinationMix(&window->driver, 0, AUDREN_FINAL_MIX_ID);
@@ -322,9 +351,10 @@ bool window_sound_open(Window *window, SoundRender render, void *user, std::stri
     window->render = render;
     window->user = user;
     window->sound_stop = false;
-    // one above the game's thread, on core 1 (the game and the raster are on core 0); it waits on
-    // the renderer every frame, so it never starves them
-    rc = threadCreate(&window->sound_thread, feed, window, nullptr, 0x10000, 0x2a, 1);
+    // one above the game's thread, on core 1 (the game and the raster are on core 0); it sleeps
+    // between looks, so it never starves them
+    // a big stack: the mixer's sequences, voices and DSP run on it
+    rc = threadCreate(&window->sound_thread, feed, window, nullptr, 0x40000, 0x2a, 1);
     if (R_FAILED(rc)) {
         audrvClose(&window->driver);
         audrenExit();
@@ -333,7 +363,16 @@ bool window_sound_open(Window *window, SoundRender render, void *user, std::stri
         why = "the sound's thread failed: " + std::to_string(rc);
         return false;
     }
-    threadStart(&window->sound_thread);
+    rc = threadStart(&window->sound_thread);
+    if (R_FAILED(rc)) {
+        threadClose(&window->sound_thread);
+        audrvClose(&window->driver);
+        audrenExit();
+        free(window->pool);
+        window->pool = nullptr;
+        why = "the sound's thread didn't start: " + std::to_string(rc);
+        return false;
+    }
     window->sound_open = true;
     fprintf(stderr, "nx: sound open: %u Hz stereo, %d pieces of %d frames\n", SA_PC_SOUND_RATE, PIECES, PIECE);
     return true;

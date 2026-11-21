@@ -2,6 +2,33 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: first-picture test read; saving, sound and captures for the next test
+
+- Test a6b0060 on the owner's Switch (handheld; clocks CPU 1020, GPU 307, memory 1331 MHz): the
+  front door ran 21,585 vsyncs: boot movies, title, Station Square, Chaos 0, Emerald Coast acts 1
+  and 2; ended by Minus and + (clean exit). Pictures at 30 a second throughout play; 1,384 vsyncs
+  late and 2,160 lost in all, nearly all at loads, movies and stage changes (vsyncs 12000-20000:
+  139 late, 88 lost). Game thread per picture: median 5.5 ms, 99th 20.0; backend CPU median 4.6,
+  99th 8.4; GPU median 3.7, 99th 14.0, most 57.9 ms. Budget at 30 fps 33 ms, at 60 fps 16.7 ms.
+- No sound: "nx: sound open" logged, but the engine reports "sound refused 8177 commands, held at
+  most 4096 of 4096, 0 voices". Sound::render drains that queue, so the feeding thread never
+  rendered. The log can't say why (no counters in the thread). Changes: 256 KB stack, a 5 ms
+  sleep in place of audrenWaitFrame, every setup result logged, and loops, pieces and samples
+  played in each heartbeat.
+- Saving failed every time ("can't write the card"): card.c writes card.bin.new and renames it
+  onto card.bin, which FAT refuses. Pausing in a stage runs stage_run_card_error, which checks
+  that the card's saves match the game's; they never did, so the card message showed in place of
+  the pause menu (the "freeze, then the title" the owner saw; game_mode 11 near vsync 10800). Patch
+  0004: on __SWITCH__ the old card is removed first, as on Windows (checked in card.o: remove,
+  then rename).
+- Captures (as in SonAdvance-nx): right stick click saves logs/shot_NNN.bmp; left stick click
+  logs/replay_NNN.bin, the last 120 pictures shown with each one's vsync, game_mode, stage and
+  act (110 MB, at most 10 a session); tools/replay/replay.py makes PNGs (16:9 runs stretched to
+  854x480). Patch 0004 adds play.c's native_play_capture hook, which turns the readback on; its
+  cost shows in the times file and the heartbeat's copy figure.
+- Settings default to 16:9 at 60 fps, and the settings in force are logged at start. The
+  heartbeat logs the clocks every 5 s.
+
 ## 2026-11-20: the window build (Vulkan on NVK): first-picture test prepared
 
 - `switch/runtime/window_nx.cpp` is the decomp's window (engine/pc/window.h) on Horizon, in place

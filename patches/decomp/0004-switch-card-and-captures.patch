@@ -1,0 +1,47 @@
+--- a/engine/native/card.c
++++ b/engine/native/card.c
+@@ -213,7 +213,8 @@
+     }
+     kept = fwrite(image, 1, sizeof card, out) == sizeof card;
+     kept = !fclose(out) && kept;
+-#ifdef _WIN32
++/* the Switch's SD card (FAT) takes no file's place on a rename either */
++#if defined(_WIN32) || defined(__SWITCH__)
+     if (kept) {
+         remove(card_path);
+         return !rename(fresh, card_path);
+--- a/engine/sa1/play.c
++++ b/engine/sa1/play.c
+@@ -467,6 +467,12 @@
+ 
+ /* keep the picture last ended for --video, and as --pictures' PNGs. under a
+  * rate, its pictures between come first, one a vsync */
++/* a host's own use of each picture shown, where it gives one: it is set
++ * before the engine opens, and turns the readback on (SonicAdventureRe-nx's
++ * captures on the Switch) */
++void native_play_capture(const uint8_t *rgba, uint32_t picture, uint32_t tick)
++    __attribute__((weak));
++
+ static void keep_picture(uint32_t picture, uint32_t tick)
+ {
+     sa_pc_stats stats = {0};
+@@ -487,6 +493,9 @@
+             continue;
+         }
+         showing_count++;
++        if (native_play_capture) {
++            native_play_capture(rgba, picture, tick);
++        }
+         if (pictures_dir) {
+             char path[4096];
+ 
+@@ -667,6 +676,9 @@
+                            .events = SA_PC_EVENTS,
+                            .platform = &options};
+     const char *roots[3] = {build_root, disc, NULL};
++    if (native_play_capture) {
++        options.flags |= SA_PC_READBACK;
++    }
+     uint32_t bytes = 0;
+     void *memory = NULL;
+     sa_result result = sa_engine_memory(&desc, &bytes);
