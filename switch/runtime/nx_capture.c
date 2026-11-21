@@ -8,6 +8,8 @@
 // from the GPU, which turns the engine's readback on. The ring keeps them as RGB (110 MB, taken
 // once). Saving runs on the game's thread, so the game stops while a replay is written.
 //
+// Off unless settings.txt says "capture 1" (nx_main.c).
+//
 // replay_NNN.bin: a header, then per picture a record, then the pictures:
 //   header  "SARNXRP1", u32 count, u32 width, u32 height, u32 wide (1 where the aspect is 16:9,
 //           so the picture is shown stretched to 16:9), char build[16]
@@ -40,6 +42,17 @@ extern int act_current;
 volatile int nx_capture_request;
 // 1 where the settings ask for 16:9 (nx_main.c reads them)
 int nx_capture_wide;
+// 1 where the settings ask for captures ("capture 1"); off, the game reads no picture back, which
+// costs it a wait for each picture (play.c's readback), so speed tests run without it
+int nx_capture_enabled;
+
+int native_play_capture_on(void)
+{
+    fprintf(stderr, "nx: capture: %s\n",
+            nx_capture_enabled ? "on (capture 1): pictures are read back, the stick clicks save them"
+                               : "off (capture 0 or no capture line in settings.txt): no picture is read back");
+    return nx_capture_enabled;
+}
 
 struct record {
     uint32_t picture, vsync;

@@ -1,0 +1,22 @@
+--- a/engine/sa1/play.c
++++ b/engine/sa1/play.c
+@@ -472,6 +472,9 @@
+  * captures on the Switch) */
+ void native_play_capture(const uint8_t *rgba, uint32_t picture, uint32_t tick)
+     __attribute__((weak));
++/* whether the host wants the pictures at all this run: the readback waits
++ * for each picture, which costs a host its speed */
++int native_play_capture_on(void) __attribute__((weak));
+ 
+ static void keep_picture(uint32_t picture, uint32_t tick)
+ {
+@@ -676,7 +679,8 @@
+                            .events = SA_PC_EVENTS,
+                            .platform = &options};
+     const char *roots[3] = {build_root, disc, NULL};
+-    if (native_play_capture) {
++    if (native_play_capture && native_play_capture_on &&
++        native_play_capture_on()) {
+         options.flags |= SA_PC_READBACK;
+     }
+     uint32_t bytes = 0;

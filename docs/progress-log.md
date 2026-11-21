@@ -2,6 +2,22 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: captures off for speed; a pause trace
+
+- the owner: no captures this build, keep the feature. Patch 0007: play.c turns the readback on only
+  where the host's native_play_capture_on gives nonzero; nx_capture.c gives settings.txt's
+  "capture" line (absent or 0: off, so no picture is waited on). A stick click with captures off
+  is logged. New settings files carry "capture 0".
+- nx_trace.c (the link wraps native_hook_pad_scan and native_hook_pad_scanned): from a pause's
+  start to its end, every change in stage_mode, pause_choice, pause_hidden, the pad's held and
+  newly pressed buttons and stick, with the pictures put on the screen since the pause began
+  (nx_overlay_presents), at most 400 lines a pause.
+- The face, on the PC copy: no shape key weight falls outside 0 to 1 in the scene
+  (action_sample_shape checked over 3,000 vsyncs), and the records copy a morphed model's points
+  at the call (records.c model_hash and memcpy), so neither extrapolation nor a shared buffer read
+  late explains it. Next suspect: the shape link (action_link.c), which morphs two shapes into
+  parts of _nj_shape_buf_ and blends them as the mouth changes shape.
+
 ## 2026-11-21: test be54505 read: saves work, audout plays, 60 fps is not held (my readback)
 
 - Saving works: three "storage: saved .../card.bin, 131072 bytes, read back the same", and the

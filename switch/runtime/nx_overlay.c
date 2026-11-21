@@ -31,6 +31,8 @@ static uint8_t pixels[OW * OH * 4];
 static u64 window_start, frames;
 static int shown_fps = -1;
 volatile int nx_overlay_fps = -1;
+// every picture put on the screen, for the pause trace (nx_trace.c)
+volatile unsigned long nx_overlay_presents;
 int nx_overlay_on = 1;
 
 static void draw(int fps)
@@ -78,6 +80,7 @@ const uint8_t *native_overlay(uint32_t *width, uint32_t *height, int32_t *x, int
         draw(-1);
     }
     frames++;
+    nx_overlay_presents++;
     if (now - window_start >= freq / 2) {
         int fps = (int)((frames * freq + (now - window_start) / 2) / (now - window_start));
         frames = 0;

@@ -29,6 +29,7 @@
 extern "C" PFN_vkVoidFunction vkGetInstanceProcAddr(VkInstance instance, const char *name);
 // nx_capture.c: a stick click asks for a capture (1 a picture, 2 a replay)
 extern "C" volatile int nx_capture_request;
+extern "C" int nx_capture_enabled;
 
 // the sound thread's progress, for the heartbeat (nx_main.c): loops run, pieces rendered and
 // queued, and the voice's played samples
@@ -198,10 +199,16 @@ bool window_pump(Window *window)
     padUpdate(&window->pad);
     const u64 held = padGetButtons(&window->pad);
     const u64 down = padGetButtonsDown(&window->pad);
-    if (down & HidNpadButton_StickR)
-        nx_capture_request |= 1;
-    if (down & HidNpadButton_StickL)
-        nx_capture_request |= 2;
+    if (down & (HidNpadButton_StickR | HidNpadButton_StickL)) {
+        if (nx_capture_enabled) {
+            if (down & HidNpadButton_StickR)
+                nx_capture_request |= 1;
+            if (down & HidNpadButton_StickL)
+                nx_capture_request |= 2;
+        } else {
+            fprintf(stderr, "nx: capture: a stick click, but captures are off this run (capture 0)\n");
+        }
+    }
     if ((held & HidNpadButton_Minus) && (held & HidNpadButton_Plus)) {
         fprintf(stderr, "nx: Minus and + held: ending the game\n");
         return true;
