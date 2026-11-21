@@ -74,10 +74,30 @@ int nx_ram_view(void *where, size_t size)
     return 1;
 }
 
+// code where the game wrote it: Horizon takes code memory once made writable as data for good
+// (Switch Test 1: RW, then RX, failed 0xd401; probe 2: RX, then RW, worked). So the map is undone,
+// which leaves what was written in the heap pages under it, and made again, executable first
 int nx_code(void *where, size_t size)
 {
     u64 at = (u64)where & ~0xfffULL;
     u64 end = ((u64)where + size + 0xfff) & ~0xfffULL;
+    for (int i = 0; i < map_count; i++) {
+        struct nx_map *m = &maps[i];
+        if (m->view_of || at < m->at || end > m->at + m->size)
+            continue;
+        Result r = svcUnmapProcessCodeMemory(proc(), m->at, m->src, m->size);
+        if (R_SUCCEEDED(r)) {
+            armDCacheFlush((void *)m->src, m->size);
+            r = svcMapProcessCodeMemory(proc(), m->at, m->src, m->size);
+        }
+        if (R_SUCCEEDED(r))
+            r = svcSetProcessMemoryPermission(proc(), m->at, m->size, Perm_Rx);
+        note("code mapped again, executable", m->at, m->size, r);
+        if (R_FAILED(r))
+            return 0;
+        armICacheInvalidate((void *)m->at, m->size);
+        return 1;
+    }
     Result r = svcSetProcessMemoryPermission(proc(), at, end - at, Perm_Rx);
     if (R_FAILED(r)) {
         note("making code failed", at, end - at, r);

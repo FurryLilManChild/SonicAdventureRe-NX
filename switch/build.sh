@@ -67,7 +67,7 @@ objects=$(printf '%s\n' $objects | sed "s|$N/obj/engine/native/runner.o|$B/runne
 
 echo "== the link, for window 5, with its relocations kept"
 aarch64-linux-gnu-ld -T switch/ld/image.ld --defsym=IMAGE_BASE=0x500400000 --defsym=syCacheICI_P2_=0x5b0000000 \
-    $aliases $wraps --wrap=_exit -no-pie -z now --build-id=none --emit-relocs -Map="$B/SonicAdventureRe-nx.map" \
+    $aliases $wraps --wrap=_exit --wrap=exit -no-pie -z now --build-id=none --emit-relocs -Map="$B/SonicAdventureRe-nx.map" \
     "$GCC/crti.o" "$GCC/crtbegin.o" $objects "$B/nx_main.o" "$B/nx_domain.o" "$B/nx_libc.o" "$B/nx_base.o" \
     -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" -L"$GCC" \
     --start-group -lstdc++ -lm -lnx -lc -lgcc -lsysbase --end-group "$GCC/crtend.o" "$GCC/crtn.o" \

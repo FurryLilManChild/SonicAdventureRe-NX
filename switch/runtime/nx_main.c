@@ -27,8 +27,8 @@ const char *nx_program_path = DIR "/SonicAdventureRe-nx.elf";
 #define NX_BUILD "unknown"
 #endif
 extern char __start__[];
-// the window the image was linked for, written into the image by the build's link
-extern char nx_link_window[];
+// the window the image links for (nx_base.S), a number the loader leaves as it is
+extern const u64 nx_link_window_number;
 
 static u64 started;
 static volatile int game_done;
@@ -80,7 +80,7 @@ u64 __nx_exception_stack_size = sizeof __nx_exception_stack;
 
 void __libnx_exception_handler(ThreadExceptionDump *ctx)
 {
-    u64 window = (u64)native_domain_base, link = (u64)nx_link_window;
+    u64 window = (u64)native_domain_base, link = nx_link_window_number;
     FILE *f = fopen(DIR "/SonicAdventureRe-nx.crash.log", "a");
     FILE *outs[2] = {f, stderr};
     for (int k = 0; k < 2; k++) {
@@ -121,22 +121,35 @@ static void wait_for_plus(void)
 void __real__exit(int status) __attribute__((noreturn));
 alignas(16) __attribute__((used)) u8 end_stack[0x10000]; // used by __wrap__exit, below
 
+// each step of the end, flushed, so a hang shows where it stopped
+static void step(const char *what)
+{
+    fprintf(stderr, "nx: end: %s (%.1f s)\n", what, seconds());
+    fflush(stderr);
+}
+
 static void __attribute__((noreturn, used)) nx_finish(int status)
 {
+    step("_exit reached, on the end's own stack");
     game_done = 1;
     if (beat_running) {
         threadWaitForExit(&beat);
         threadClose(&beat);
         beat_running = 0;
     }
+    step("heartbeat stopped");
     double t = seconds();
     fflush(stderr);
     consoleClear();
     printf("SonicAdventureRe-nx Switch Test 1 (build %s)\n\n", NX_BUILD);
     printf("Run over after %.1f s, status %d.\n", t, status);
     printf("Where the game got to:\n  %lu vsyncs, ", native_vsyncs);
+    step("the game's report");
+    native_report_state(stderr);
     native_report_state(stdout);
     printf("\n(the PC build reaches 396 frames in 600 vsyncs)\n\n");
+    consoleUpdate(NULL);
+    step("undoing the domain's maps");
     int maps = nx_domain_maps();
     int undone = nx_domain_unmap_all();
     fprintf(stderr, "nx: run over after %.1f s, status %d; %d domain maps undone: %s\n", t, status, maps,
@@ -145,9 +158,22 @@ static void __attribute__((noreturn, used)) nx_finish(int status)
     fflush(stderr);
     printf("Domain maps undone: %s\nPress + to exit.\n", undone ? "SOME FAILED" : "ok");
     consoleUpdate(NULL);
+    step("waiting for +");
     wait_for_plus();
+    step("+ pressed, leaving");
     consoleExit(NULL);
     __real__exit(status);
+}
+
+// exit runs the C library's handlers (atexit, C++ destructors) before _exit: logged, so a hang
+// in them shows
+void __real_exit(int status) __attribute__((noreturn));
+void __wrap_exit(int status) __attribute__((noreturn));
+void __wrap_exit(int status)
+{
+    fprintf(stderr, "nx: end: exit(%d) called; the C library's handlers run next (%.1f s)\n", status, seconds());
+    fflush(stderr);
+    __real_exit(status);
 }
 
 void __wrap__exit(int status) __attribute__((noreturn));
@@ -174,7 +200,7 @@ int main(int argc, char **argv)
     line("SonicAdventureRe-nx Switch Test 1 (build %s)\n", NX_BUILD);
     line("Emerald Coast, headless, 600 vsyncs. No picture: this checks the game runs.\n\n");
     line("image at %p in window %p (linked for %p)\n", (void *)__start__, (void *)native_domain_base,
-         (void *)nx_link_window);
+         (void *)nx_link_window_number);
     u64 clk[3] = {0};
     if (R_SUCCEEDED(clkrstInitialize())) {
         const PcvModuleId mods[3] = {PcvModuleId_CpuBus, PcvModuleId_GPU, PcvModuleId_EMC};

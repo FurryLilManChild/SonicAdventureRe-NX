@@ -2,6 +2,21 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-20: Switch Test 1 on the owner's Switch, and Test 2's fixes
+
+- Test 1 (build 0c4589e), log: the loader chose window 4 of 4 5 6 8 9 10 14 15, moved 66,482
+  addresses, mapped the image (0) and started it; the game's libnx came up; clocks CPU 1020 MHz,
+  GPU 307 MHz, memory 1331 MHz. The domain's RAM, mirrors, devices and stacks mapped. Then
+  "making code failed at 0x4b0000000: 0xd401" and "sa1: can't map the P2 calls": code memory made
+  RW (the runner writes its RET) can't then be made RX. Probe 2 made it RX first, then RW. The
+  stack guards (Perm_None) failed the same way (the run carries on without them). The screen then
+  went black; nothing after the failure was logged, so the exit path's hang (or a silent end
+  screen) is unplaced. the owner went Home without pressing +.
+- Test 2: nx_code unmaps the code memory (what the game wrote stays in the heap pages), maps it
+  again and makes it RX at once. The exit path logs each step (exit wrapped to log before the C
+  library's handlers; _exit's end logs every stage). The log's "linked for" reads a number the
+  loader doesn't move (nx_link_window_number).
+
 ## 2026-11-20: Switch Test 1 built (headless Emerald Coast on Horizon)
 
 - Toolchain (devkitPro's tools run under Wine here, which now crashes): clang for all code, clang
