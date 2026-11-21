@@ -1,0 +1,23 @@
+--- a/events/shared/mover.c
++++ b/events/shared/mover.c
+@@ -31,6 +31,20 @@
+     NJS_VECTOR moved;
+     struct angles turned;
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    /* a follow move whose base, or a move whose target, a task has gone from
++     * reads through a null work: on the console a read of the boot ROM near
++     * address 0, but a fault on a host. a skip's passes ran one so, after the
++     * Egg Hornet. such a move ends as its _END mode would end it */
++    if (work->mode % 3 == 2 &&
++        ((move->target != NULL && move->target->work == NULL) ||
++         ((work->mode == MOVER_FOLLOW || work->mode == MOVER_FOLLOW_TURN ||
++           work->mode == MOVER_FOLLOW_ANGLES || work->mode == MOVER_FACING) &&
++          (move->base == NULL || move->base->work == NULL)))) {
++        work->mode++;
++        return;
++    }
++#endif
+     switch (work->mode) {
+     case MOVER_IDLE:
+         break;

@@ -1,0 +1,44 @@
+--- a/engine/native/gdfs.c
++++ b/engine/native/gdfs.c
+@@ -85,6 +85,12 @@
+ {
+     char path[512];
+ 
++    /* a hook may give another file in the disc's place, as another
++     * language's */
++    if (native_hook_disc_file(name, out, size)) {
++        return 1;
++    }
++
+     snprintf(path, sizeof path, "%s/%s", native_disc, directory);
+     return entry_nocase(path, name, out, size);
+ }
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -129,6 +129,14 @@
+     return NULL;
+ }
+ 
++int native_hook_disc_file(const char *name, char *out, size_t size)
++{
++    (void)name;
++    (void)out;
++    (void)size;
++    return 0;
++}
++
+ int native_hook_voice_file(const char *archive, int fid, const void **data,
+                            size_t *size)
+ {
+--- a/engine/native/native.h
++++ b/engine/native/native.h
+@@ -260,6 +260,9 @@
+ const char *native_hook_event_text_next(void);
+ int native_hook_voice_file(const char *archive, int fid, const void **data,
+                            size_t *size);
++/* a disc file the game opens by name: native_hook_disc_file may give a host
++ * path in its place in out, and returns 1 where it does */
++int native_hook_disc_file(const char *name, char *out, size_t size);
+ 
+ /* XMTRX: XF0 to XF15, as sa_ftrv takes them */
+ float *native_xmtrx(void);

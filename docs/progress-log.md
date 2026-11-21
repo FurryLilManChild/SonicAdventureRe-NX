@@ -2,6 +2,33 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: Skip crash fixed; English menus, HUD, missions and field messages
+
+- the owner (test 6021ce7): English cutscene voices and subtitles work. A crash in or after the cutscene
+  after the Egg Hornet, as he skipped it with +. Atmosphere's report 01795287561: Data Abort at
+  0x20, PC image+0x3255fc = event_mover_step (events/shared/mover.c:84, MOVER_FOLLOW) from
+  event_mover_pay/event_mover_skip_step (the decomp's skip): move->base->work was null, the
+  followed task gone, and its pos read at 0x20. On the Dreamcast a read near 0 lands in the boot
+  ROM; on a host it faults. Upstream (004279f) has the same code. Patch 0012 (native only): a
+  follow or facing move whose base, or any move whose target, has no work goes to its _END mode.
+- Patch 0013: native_hook_disc_file in gdfs.c's find_nocase may give a host path in place of a
+  disc file. nx_english.c answers from english/files.txt ("text NAME" or "voices NAME"), by the
+  TEXT and VOICES settings.
+- tools/english/make_english.py now also takes the Japanese disc, and writes, under the Japanese
+  names: texture files (PRS and PVR) with each texture whose size matches the US one in the same
+  place taken from the US (the Japanese GBIX stays, the PVM rewritten and stored as literal-only
+  PRS, which the 2 MB work area holds: the largest is 1.4 MB), and the fields' message files
+  (MR_MES, SS_MES, PAST_MES) moved to the Japanese base (Station Square's US files load at
+  0x0cb46000, the Japanese at 0x0cb48000) with each script's voice renumbered to a Japanese clip
+  that maps to the same US clip, or 0x2000 plus the US number (nx_english.c plays that one with
+  English voices only). On the owner's discs: 125 files, 813 of 842 textures or message files in
+  English; 18 texture archives match whole, the menus and tutorials keep 1 to 7 Japanese textures
+  each (sizes differ).
+- Sound units (V_*.MLT, ALIFE_*, CASINO_*, SKYDECK): held back. Only 4 to 12 of each unit's ~20
+  banks keep the Japanese type, number, address and size; a unit mixing US and Japanese banks
+  could play the wrong sounds. common.swap_banks stays for the next look.
+- Not covered: the stages' hint scripts (Tikal's orbs), which are compiled into 1ST_READ.
+
 ## 2026-11-21: English layer, part 1: cutscene voices and subtitles
 
 - the owner (test 3f2a27b): the pause menu shows, resume stays resumed, quitting returns to the home

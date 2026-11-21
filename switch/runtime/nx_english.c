@@ -5,6 +5,12 @@
 //   voice_map.txt     which English clip each Japanese clip plays (Japanese index, US index)
 //   subtitles.txt     each cutscene subtitle in English: cutscene, CRC-32 of the Japanese line,
 //                     then the English parts, tab-separated
+//   files.txt         the Japanese files this folder holds English versions of, under the same
+//                     names: menus, HUD, results and mission textures, and the fields' messages
+//                     ("text NAME"); later the sound units ("voices NAME")
+//
+// A field's messages name their voices as the Japanese game plays them; a voice the Japanese game
+// has no clip for is 0x2000 plus its US number, which plays only with English voices.
 //
 // The decomp calls three hooks (patch 0011), which the link wraps (switch/build.sh):
 //   native_hook_voice_file      a cutscene voice: the English clip in the Japanese one's place
@@ -53,6 +59,14 @@ struct line {
 };
 static struct line *lines;
 static int line_count;
+
+// the files read from this folder in place of the disc's
+struct file {
+    char name[40];
+    int voices; // 1 for a sound unit (the VOICES setting), 0 for text
+};
+static struct file *swaps;
+static int swap_count;
 
 static uint32_t crc_table[256];
 
@@ -209,6 +223,42 @@ static void load_text(void)
     fprintf(stderr, "english: subtitles: %d lines\n", line_count);
 }
 
+static void load_files(void)
+{
+    FILE *f = fopen(ENGLISH "/files.txt", "r");
+    if (!f) {
+        fprintf(stderr, "english: files: none (english/files.txt)\n");
+        return;
+    }
+    char row[96];
+    int room = 0;
+    while (fgets(row, sizeof row, f)) {
+        // "kind NAME" (no sscanf: the game's C brings its own, which the link may pick)
+        if (row[0] == '#')
+            continue;
+        row[strcspn(row, "\r\n")] = 0;
+        char *space = strchr(row, ' ');
+        if (!space)
+            continue;
+        *space = 0;
+        const char *kind = row, *name = space + 1;
+        if (!*name || strlen(name) >= sizeof swaps->name)
+            continue;
+        if (swap_count == room) {
+            room = room ? room * 2 : 128;
+            struct file *more = realloc(swaps, (size_t)room * sizeof *swaps);
+            if (!more)
+                break;
+            swaps = more;
+        }
+        struct file *s = &swaps[swap_count++];
+        snprintf(s->name, sizeof s->name, "%s", name);
+        s->voices = !strcmp(kind, "voices");
+    }
+    fclose(f);
+    fprintf(stderr, "english: files: %d\n", swap_count);
+}
+
 static void load(void)
 {
     if (loaded)
@@ -216,6 +266,28 @@ static void load(void)
     loaded = 1;
     load_voices();
     load_text();
+    load_files();
+}
+
+// a disc file the game opens: the English one in its place, by the settings
+int __wrap_native_hook_disc_file(const char *name, char *out, size_t size)
+{
+    if (!name || (!nx_text_english && !nx_voices_english))
+        return 0;
+    load();
+    const char *base = strrchr(name, '/');
+    base = base ? base + 1 : name;
+    for (int i = 0; i < swap_count; i++)
+        if (!strcasecmp(swaps[i].name, base)) {
+            if (swaps[i].voices ? !nx_voices_english : !nx_text_english)
+                return 0;
+            snprintf(out, size, "%s/%s", ENGLISH, swaps[i].name);
+            static int told;
+            if (told++ < 40)
+                fprintf(stderr, "english: %s from the english folder\n", swaps[i].name);
+            return 1;
+        }
+    return 0;
 }
 
 // whether the folder has each (for the menu and the settings' log)
@@ -251,13 +323,14 @@ static double voice_seconds; // and how long it plays
 
 int __wrap_native_hook_voice_file(const char *archive, int fid, const void **data, size_t *size)
 {
-    if (!nx_voices_english || !archive || fid < 0 || fid >= 4096)
+    if (!nx_voices_english || !archive || fid < 0)
         return 0;
     size_t n = strlen(archive);
     if (n < 13 || strcasecmp(archive + n - 13, "event_adx.afs"))
         return 0;
     load();
-    int us = voice_map[fid];
+    // 0x2000 and up: a US clip the Japanese game has none for (an English field message's voice)
+    int us = fid >= 0x2000 ? fid - 0x2000 : fid < 4096 ? voice_map[fid] : -1;
     if (!have_voices || us < 0 || (uint32_t)us >= clips)
         return 0;
     size_t want = clip_size[us];
