@@ -2,6 +2,19 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: test 4ca411a read: 60 fps holds with captures off; pause traced
+
+- Captures off ("nx: capture: off"), handheld at 1020/307/1331 MHz. Emerald Coast acts 1 and 2
+  (game_mode 9): 30 of 39 heartbeats at 60 or 61 frames a second on screen, dips of 43, 52, 53
+  and 59 (one near the act's end, where the owner saw the dolphins), two 30s at a load and an event.
+  So the per-picture readback was what held 60 back.
+- Pause trace (about 20 pauses): pictures keep reaching the screen while paused (one a scan), so
+  the menu is not drawn into them; pause_choice stays 0 (continue); the stick reads 0,0. A fresh
+  press of + resumes (stage_mode 15 to 14), and two scans later the stage pauses again with + still
+  held, so the game saw a second press in a scan the trace did not log (it stopped at the pause's
+  end). Next: log every scan to 10 past a pause's end, each newly pressed + the window reports and
+  from which read, and the pause menu's draws (sprites and texture) while paused.
+
 ## 2026-11-21: captures off for speed; a pause trace
 
 - the owner: no captures this build, keep the feature. Patch 0007: play.c turns the readback on only
