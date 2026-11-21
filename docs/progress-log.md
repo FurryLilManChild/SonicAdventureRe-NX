@@ -2,6 +2,11 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: sound confirmed by ear
+
+- the owner: sound has worked in builds be54505 and 4ca411a (audout, the game's 44.1 kHz resampled
+  to 48 kHz), matching the logs' steady 47 buffers a second played and returned.
+
 ## 2026-11-21: test 4ca411a read: 60 fps holds with captures off; pause traced
 
 - Captures off ("nx: capture: off"), handheld at 1020/307/1331 MHz. Emerald Coast acts 1 and 2
