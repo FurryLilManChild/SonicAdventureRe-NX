@@ -39,8 +39,10 @@ static int beat_running;
 
 void native_report_state(FILE *stream);
 extern volatile unsigned long nx_sound_loops, nx_sound_pieces, nx_sound_played, nx_sound_started;
+extern volatile unsigned long nx_sound_returned, nx_sound_waits_empty;
 double nx_capture_copy_ms(void);
 extern int nx_capture_wide;
+extern volatile int nx_overlay_fps;
 
 // the clocks now, in MHz: CPU, GPU, memory (sys-clk can change them during a run)
 static void clocks(u32 mhz[3])
@@ -90,11 +92,12 @@ static void heartbeat(void *arg)
         u32 mhz[3];
         clocks(mhz);
         fprintf(stderr,
-                "[heartbeat] %.1f s: %lu vsyncs, %.1f a second%s; clocks %u/%u/%u MHz; sound: thread %s, %lu loops, "
-                "%lu pieces, %lu samples played; replay copy %.2f ms a picture\n",
-                seconds(), v, last == ~0UL ? 0.0 : (v - last) / 5.0,
+                "[heartbeat] %.1f s: %d frames a second on screen; %lu vsyncs, %.1f a second%s; clocks %u/%u/%u MHz; sound: thread %s, %lu loops, "
+                "%lu buffers queued, %lu played and returned (%lu waits with none); replay copy %.2f ms a picture\n",
+                seconds(), nx_overlay_fps, v, last == ~0UL ? 0.0 : (v - last) / 5.0,
                 v == last ? " (no progress since the last beat)" : "", mhz[0], mhz[1], mhz[2],
-                nx_sound_started ? "running" : "NOT STARTED", nx_sound_loops, nx_sound_pieces, nx_sound_played,
+                nx_sound_started ? "running" : "NOT STARTED", nx_sound_loops, nx_sound_pieces, nx_sound_returned,
+                nx_sound_waits_empty,
                 nx_capture_copy_ms());
         last = v;
     }

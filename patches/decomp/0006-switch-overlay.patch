@@ -1,0 +1,69 @@
+--- a/engine/pc/raster.cpp
++++ b/engine/pc/raster.cpp
+@@ -27,6 +27,14 @@
+  * would call a missing initializer */
+ #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+ 
++/* a host's overlay over the window, where it gives one (SonicAdventureRe-nx's
++ * frame counter on the Switch): called once a picture shown, it gives RGBA
++ * pixels of width by height, gray, so either byte order shows them alike, and
++ * where they go from the region's top left. null shows none */
++extern "C" const uint8_t *native_overlay(uint32_t &width, uint32_t &height,
++                                         int32_t &x, int32_t &y)
++    __attribute__((weak));
++
+ namespace pc {
+ 
+ namespace {
+@@ -225,6 +233,7 @@
+     Buffer vertices;
+     Buffer readback;
+     Buffer stats; /* the fragments' head as the picture left it */
++    Buffer overlay; /* the host's overlay, where it gives one */
+ };
+ 
+ /* the words of the fragments' head, as the shaders' Fragments holds them,
+@@ -1622,6 +1631,7 @@
+             r.free_buffer(f.vertices);
+             r.free_buffer(f.readback);
+             r.free_buffer(f.stats);
++            r.free_buffer(f.overlay);
+         }
+         vk.vkDestroyQueryPool(r.device, r.timer, nullptr);
+         for (auto &p : r.pipelines) {
+@@ -2475,6 +2485,35 @@
+         vk.vkCmdBlitImage(
+             c, fitted ? r.fitted.image : r.color, VK_IMAGE_LAYOUT_GENERAL, to,
+             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
++        uint32_t ow = 0, oh = 0;
++        int32_t ox = 0, oy = 0;
++        const uint8_t *over =
++            native_overlay ? native_overlay(ow, oh, ox, oy) : nullptr;
++        std::string lost;
++
++        if (over != nullptr && ow != 0 && oh != 0 &&
++            ox + static_cast<int64_t>(ow) <= shows.extent.width &&
++            oy + static_cast<int64_t>(oh) <= shows.extent.height &&
++            (f.overlay.buffer != VK_NULL_HANDLE ||
++             r.make_buffer(f.overlay, 256 * 64 * 4,
++                           VK_BUFFER_USAGE_TRANSFER_SRC_BIT, lost)) &&
++            static_cast<VkDeviceSize>(ow) * oh * 4 <= f.overlay.size) {
++            VkBufferImageCopy place{};
++
++            memcpy(f.overlay.mapped, over, static_cast<size_t>(ow) * oh * 4);
++            r.barrier(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 1,
++                      VK_ACCESS_TRANSFER_WRITE_BIT,
++                      VK_ACCESS_TRANSFER_WRITE_BIT,
++                      VK_PIPELINE_STAGE_TRANSFER_BIT,
++                      VK_PIPELINE_STAGE_TRANSFER_BIT);
++            place.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
++            place.imageOffset = {shows.offset.x + ox, shows.offset.y + oy, 0};
++            place.imageExtent = {ow, oh, 1};
++            vk.vkCmdCopyBufferToImage(c, f.overlay.buffer, to,
++                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
++                                      &place);
++        }
+         r.barrier(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, 1,
+                   VK_ACCESS_TRANSFER_WRITE_BIT, 0,

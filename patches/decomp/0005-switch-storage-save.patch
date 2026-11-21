@@ -1,0 +1,87 @@
+--- a/engine/native/card.c
++++ b/engine/native/card.c
+@@ -357,7 +357,7 @@
+     return 1;
+ }
+ 
+-#ifdef _WIN32
++#if defined(_WIN32) || defined(__SWITCH__)
+ /* whether a whole new card that filed left beside no card took the card's
+  * name. a partial or damaged new card stays */
+ static int adopted(void)
+@@ -388,8 +388,9 @@
+ 
+     loaded = 1;
+     result = fetched();
+-#ifdef _WIN32
+-    /* with an engine too: a run without one may have left a new card */
++#if defined(_WIN32) || defined(__SWITCH__)
++    /* with an engine too: a run without one may have left a new card (on the
++     * Switch, a save whose rename failed after the old card went) */
+     if (result == SA_ERR_MISSING && adopted()) {
+         result = fetched();
+     }
+--- a/engine/pc/storage.cpp
++++ b/engine/pc/storage.cpp
+@@ -8,6 +8,7 @@
+ #include <errno.h>
+ #include <fcntl.h>
+ #include <stdio.h>
++#include <string.h>
+ #include <string>
+ #include <sys/stat.h>
+ #include <unistd.h>
+@@ -169,10 +170,53 @@
+     if (fd >= 0) {
+         done = close(fd) == 0 && done;
+     }
++#ifdef __SWITCH__
++    /* the Switch's SD card (FAT) renames onto no file that exists, so the
++     * save goes first. a rename that then fails leaves the new file whole
++     * under its own name, which card.c's adopted takes as the card next time,
++     * so it stays. each step is logged, with the bytes read back */
++    if (!done) {
++        fprintf(stderr, "storage: writing %s failed: %s\n", fresh.c_str(),
++                strerror(errno));
++        unlink(fresh.c_str());
++        engine->resources.give(handle);
++        return SA_ERR_IO;
++    }
++    if (remove(name) != 0 && errno != ENOENT) {
++        fprintf(stderr, "storage: removing the old %s failed: %s\n", name,
++                strerror(errno));
++        unlink(fresh.c_str());
++        engine->resources.give(handle);
++        return SA_ERR_IO;
++    }
++    if (rename(fresh.c_str(), name) != 0) {
++        fprintf(stderr, "storage: renaming %s to %s failed: %s (kept as %s)\n",
++                fresh.c_str(), name, strerror(errno), fresh.c_str());
++        engine->resources.give(handle);
++        return SA_ERR_IO;
++    }
++    {
++        FILE *back = fopen(name, "rb");
++        std::string read(bytes + 1, '\0');
++        size_t got = back ? fread(&read[0], 1, bytes + 1, back) : 0;
++
++        if (back) {
++            fclose(back);
++        }
++        bool same = got == bytes && memcmp(read.data(), data, bytes) == 0;
++        fprintf(stderr, "storage: saved %s, %u bytes, read back %s\n", name,
++                bytes, same ? "the same" : "DIFFERENT");
++        if (!same) {
++            engine->resources.give(handle);
++            return SA_ERR_IO;
++        }
++    }
++#else
+     if (!done || take_place(fresh.c_str(), name) != 0) {
+         unlink(fresh.c_str());
+         engine->resources.give(handle);
+         return SA_ERR_IO;
+     }
++#endif
+     return end(*engine, handle, bytes, request);
+ }

@@ -2,6 +2,27 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: saving through the engine's storage, sound on audout, frame counter
+
+- Patch 0005: storage.cpp (the writer a windowed run's card uses) on __SWITCH__ removes the old
+  save before renaming the new file onto its name, logs each step's errno, and reads the save
+  back to compare ("storage: saved NAME, N bytes, read back the same"). A rename that fails after
+  the old save went leaves NAME.new whole; card.c's adopted (now on __SWITCH__ too, as on
+  Windows) takes it as the card at the next start. Checked in the build: storage.o holds the new
+  lines, card.ll calls adopted.
+- Sound moves from audrv/audren (silent: 0 samples played) to audout at its own rate (48 kHz):
+  four 0x1000-aligned buffers of 1024 frames, the game's 44.1 kHz resampled linearly, buffers
+  refilled as audoutWaitPlayFinish returns them. The log gives the buffers' memory type (Horizon's
+  svcQueryMemory) and the heartbeat the buffers queued and returned.
+- Patch 0006: raster.cpp asks a weak native_overlay for pixels once a picture shown and copies
+  them onto the swapchain image after the picture (vkCmdCopyBufferToImage, a per-frame
+  host buffer). nx_overlay.c counts those calls: frames on screen a second, drawn as "NN FPS" at
+  the top left, renewed every half second, and logged in the heartbeat. Captures are read back
+  before it, so they never hold it.
+- Chaos 0's 33 to 45 a second (test 5f3d5d3): runs of 60 a second for 7, 14 and 24 s with 30 a
+  second between (39 s, 14 s). pace.c asks 60 only in stage play (stage_in_play, frame_interval
+  2, two steps), so the entry event and other events stay at 30 by the decomp's design.
+
 ## 2026-11-21: test 5f3d5d3 read (16:9, 60 fps, captures)
 
 - Settings in force logged: aspect 16:9, fps 60, vsync 1, sound 1, resolution 1. Clocks

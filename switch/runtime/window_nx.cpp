@@ -1,6 +1,6 @@
 // SonicAdventureRe-nx: the decomp's window (engine/pc/window.h) on Horizon, in place of its SDL3
 // window.cpp. It gives the raster a VI surface on the default NWindow (NVK's VK_NN_vi_surface),
-// the pad from libnx's HID, and sound through the audio renderer (audrv) at SA_PC_SOUND_RATE.
+// the pad from libnx's HID, and sound through audout (resampled from SA_PC_SOUND_RATE).
 //
 // The pad is positional, as the Dreamcast's face buttons lie: the Dreamcast's A (bottom) is the
 // Switch's B, its B (right) is A, its X (left) is Y and its Y (top) is X. Start is +. ZL and ZR
@@ -34,6 +34,7 @@ extern "C" volatile int nx_capture_request;
 // queued, and the voice's played samples
 extern "C" {
 volatile unsigned long nx_sound_loops, nx_sound_pieces, nx_sound_played, nx_sound_started;
+volatile unsigned long nx_sound_returned, nx_sound_waits_empty;
 }
 
 namespace pc {
@@ -56,19 +57,14 @@ enum : uint32_t {
     PAD_TL = 1 << 17,
 };
 
-// the sound's pieces: PIECES buffers of PIECE frames each, about 23 ms a piece at 44.1 kHz
+// the sound: audout, the Switch's plain audio output (48 kHz stereo), fed PIECES buffers of PIECE
+// frames (about 21 ms each). The game renders at SA_PC_SOUND_RATE (44.1 kHz), which feed()
+// resamples, linearly, to the output's rate
 constexpr int PIECE = 1024;
 constexpr int PIECES = 4;
-constexpr size_t PIECE_BYTES = PIECE * 2 * sizeof(int16_t);
-
-const AudioRendererConfig SOUND_CONFIG = {
-    AudioRendererOutputRate_48kHz, // output_rate
-    1,                             // num_voices
-    0,                             // num_effects
-    1,                             // num_sinks
-    1,                             // num_mix_objs
-    2,                             // num_mix_buffers
-};
+constexpr size_t PIECE_BYTES = (PIECE * 2 * sizeof(int16_t) + 0xfff) & ~size_t(0xfff);
+// the game's frames rendered at a time, ahead of the resampler
+constexpr int SOURCE = 512;
 
 // a stick's axis from -1 to 1, with its partner's for the reach: past dead, out to 1, and where
 // square, stretched so a push to a corner reaches the corner
@@ -108,9 +104,13 @@ struct Window {
     bool sound_open;
     volatile bool sound_stop;
     Thread sound_thread;
-    AudioDriver driver;
-    void *pool; // the pieces, in one memory pool
-    AudioDriverWaveBuf pieces[PIECES];
+    u32 out_rate;
+    void *pool; // the pieces' samples, 0x1000-aligned
+    AudioOutBuffer pieces[PIECES];
+    // the resampler: the game's frames rendered and not yet used, and the place between them
+    int16_t source[2 * (SOURCE + 1)];
+    int source_count, source_at;
+    double phase;
 };
 
 Window *window_open(const char *title, uint32_t width, uint32_t height, uint32_t flags,
@@ -262,37 +262,70 @@ sa_result window_rumble(Window *, uint32_t, uint16_t, uint16_t, uint32_t, uint32
 
 namespace {
 
-// the sound's thread: each piece the renderer has played is rendered again and queued. It
-// sleeps 5 ms between looks (a piece lasts 23 ms) rather than wait on the renderer's frame event
+// the next output frame: the game's frames at the place between source[at] and source[at + 1]
+void resampled(Window *w, int16_t *out, int frames)
+{
+    const double step = (double)SA_PC_SOUND_RATE / w->out_rate;
+    for (int f = 0; f < frames; f++) {
+        // keep two of the game's frames ahead: render more where fewer are left
+        while (w->source_at + 1 >= w->source_count) {
+            // the last frame stays, as the first of the next run
+            int keep = w->source_count > 0 ? 1 : 0;
+            if (keep) {
+                w->source[0] = w->source[2 * (w->source_count - 1)];
+                w->source[1] = w->source[2 * (w->source_count - 1) + 1];
+            }
+            w->render(w->user, w->source + 2 * keep, SOURCE);
+            w->source_at -= w->source_count - keep;
+            if (w->source_at < 0)
+                w->source_at = 0;
+            w->source_count = keep + SOURCE;
+        }
+        const int16_t *a = w->source + 2 * w->source_at, *b = a + 2;
+        const float t = (float)w->phase;
+        out[2 * f] = (int16_t)lrintf(a[0] + (b[0] - a[0]) * t);
+        out[2 * f + 1] = (int16_t)lrintf(a[1] + (b[1] - a[1]) * t);
+        w->phase += step;
+        while (w->phase >= 1.0) {
+            w->phase -= 1.0;
+            w->source_at++;
+        }
+    }
+}
+
+void fill_and_queue(Window *w, AudioOutBuffer *p)
+{
+    resampled(w, static_cast<int16_t *>(p->buffer), PIECE);
+    p->data_size = PIECE * 2 * sizeof(int16_t);
+    p->data_offset = 0;
+    armDCacheFlush(p->buffer, p->buffer_size);
+    Result rc = audoutAppendAudioOutBuffer(p);
+    if (R_FAILED(rc))
+        fprintf(stderr, "nx: sound: audoutAppendAudioOutBuffer failed: %#x\n", rc);
+    nx_sound_pieces++;
+}
+
+// the sound's thread: every buffer audout gives back is filled again and queued. It waits on
+// audout (at most 100 ms a wait, so a stop is seen)
 void feed(void *arg)
 {
     Window *w = static_cast<Window *>(arg);
     nx_sound_started = 1;
     fprintf(stderr, "nx: sound thread running\n");
-    bool logged_update = false;
+    for (int i = 0; i < PIECES; i++)
+        fill_and_queue(w, &w->pieces[i]);
     while (!w->sound_stop) {
-        for (int i = 0; i < PIECES; i++) {
-            AudioDriverWaveBuf &p = w->pieces[i];
-            if (p.state != AudioDriverWaveBufState_Free && p.state != AudioDriverWaveBufState_Done)
-                continue;
-            w->render(w->user, p.data_pcm16, PIECE);
-            armDCacheFlush(p.data_pcm16, PIECE_BYTES);
-            if (!audrvVoiceAddWaveBuf(&w->driver, 0, &p) && !logged_update) {
-                fprintf(stderr, "nx: sound: audrvVoiceAddWaveBuf refused a piece\n");
-                logged_update = true;
-            }
-            nx_sound_pieces++;
-        }
-        if (!audrvVoiceIsPlaying(&w->driver, 0))
-            audrvVoiceStart(&w->driver, 0);
-        Result rc = audrvUpdate(&w->driver);
-        if (R_FAILED(rc) && !logged_update) {
-            fprintf(stderr, "nx: sound: audrvUpdate failed: %#x\n", rc);
-            logged_update = true;
-        }
-        nx_sound_played = audrvVoiceGetPlayedSampleCount(&w->driver, 0);
+        AudioOutBuffer *released = nullptr;
+        u32 count = 0;
+        Result rc = audoutWaitPlayFinish(&released, &count, 100000000ULL);
         nx_sound_loops++;
-        svcSleepThread(5000000);
+        if (R_FAILED(rc) || released == nullptr || count == 0) {
+            nx_sound_waits_empty++;
+            continue;
+        }
+        nx_sound_returned += count;
+        nx_sound_played = nx_sound_returned * PIECE;
+        fill_and_queue(w, released);
     }
 }
 
@@ -304,48 +337,45 @@ bool window_sound_open(Window *window, SoundRender render, void *user, std::stri
         why = "no window";
         return false;
     }
-    Result rc = audrenInitialize(&SOUND_CONFIG);
+    Result rc = audoutInitialize();
     if (R_FAILED(rc)) {
-        why = "audrenInitialize failed: " + std::to_string(rc);
+        why = "audoutInitialize failed: " + std::to_string(rc);
         return false;
     }
-    rc = audrvCreate(&window->driver, &SOUND_CONFIG, 2);
+    rc = audoutStartAudioOut();
     if (R_FAILED(rc)) {
-        audrenExit();
-        why = "audrvCreate failed: " + std::to_string(rc);
+        audoutExit();
+        why = "audoutStartAudioOut failed: " + std::to_string(rc);
         return false;
     }
-    const size_t pool_size = (PIECES * PIECE_BYTES + AUDREN_MEMPOOL_ALIGNMENT - 1) & ~(size_t)(AUDREN_MEMPOOL_ALIGNMENT - 1);
-    window->pool = memalign(AUDREN_MEMPOOL_ALIGNMENT, pool_size);
+    window->out_rate = audoutGetSampleRate();
+    if (window->out_rate == 0)
+        window->out_rate = 48000;
+    window->pool = memalign(0x1000, PIECES * PIECE_BYTES);
     if (window->pool == nullptr) {
-        audrvClose(&window->driver);
-        audrenExit();
+        audoutStopAudioOut();
+        audoutExit();
         why = "no memory for the sound's buffers";
         return false;
     }
-    memset(window->pool, 0, pool_size);
-    armDCacheFlush(window->pool, pool_size);
-    int pool = audrvMemPoolAdd(&window->driver, window->pool, pool_size);
-    audrvMemPoolAttach(&window->driver, pool);
-    static const u8 sink_channels[] = {0, 1};
-    audrvDeviceSinkAdd(&window->driver, AUDREN_DEFAULT_DEVICE_NAME, 2, sink_channels);
-    rc = audrvUpdate(&window->driver);
-    Result started = audrenStartAudioRenderer();
-    fprintf(stderr, "nx: sound: memory pool %d, first update %#x, renderer start %#x\n", pool, rc, started);
-
-    audrvVoiceInit(&window->driver, 0, 2, PcmFormat_Int16, SA_PC_SOUND_RATE);
-    audrvVoiceSetDestinationMix(&window->driver, 0, AUDREN_FINAL_MIX_ID);
-    audrvVoiceSetMixFactor(&window->driver, 0, 1.0f, 0, 0);
-    audrvVoiceSetMixFactor(&window->driver, 0, 0.0f, 0, 1);
-    audrvVoiceSetMixFactor(&window->driver, 0, 0.0f, 1, 0);
-    audrvVoiceSetMixFactor(&window->driver, 0, 1.0f, 1, 1);
+    memset(window->pool, 0, PIECES * PIECE_BYTES);
     for (int i = 0; i < PIECES; i++) {
-        AudioDriverWaveBuf &p = window->pieces[i];
-        p = AudioDriverWaveBuf{};
-        p.data_pcm16 = reinterpret_cast<s16 *>(static_cast<u8 *>(window->pool) + i * PIECE_BYTES);
-        p.size = PIECE_BYTES;
-        p.start_sample_offset = 0;
-        p.end_sample_offset = PIECE;
+        AudioOutBuffer &p = window->pieces[i];
+        p = AudioOutBuffer{};
+        p.buffer = static_cast<u8 *>(window->pool) + i * PIECE_BYTES;
+        p.buffer_size = PIECE_BYTES;
+    }
+    window->source_count = 0;
+    window->source_at = 0;
+    window->phase = 0;
+    {
+        // where the buffers lie, as Horizon sees the memory (audio needs ordinary heap memory)
+        MemoryInfo info{};
+        u32 page = 0;
+        svcQueryMemory(&info, &page, reinterpret_cast<u64>(window->pool));
+        fprintf(stderr, "nx: sound: audout at %u Hz, %u channels; buffers at %p: memory type %#x, attributes %#x, "
+                        "permissions %#x\n",
+                window->out_rate, audoutGetChannelCount(), window->pool, info.type, info.attr, info.perm);
     }
 
     window->render = render;
@@ -356,8 +386,8 @@ bool window_sound_open(Window *window, SoundRender render, void *user, std::stri
     // a big stack: the mixer's sequences, voices and DSP run on it
     rc = threadCreate(&window->sound_thread, feed, window, nullptr, 0x40000, 0x2a, 1);
     if (R_FAILED(rc)) {
-        audrvClose(&window->driver);
-        audrenExit();
+        audoutStopAudioOut();
+        audoutExit();
         free(window->pool);
         window->pool = nullptr;
         why = "the sound's thread failed: " + std::to_string(rc);
@@ -366,15 +396,16 @@ bool window_sound_open(Window *window, SoundRender render, void *user, std::stri
     rc = threadStart(&window->sound_thread);
     if (R_FAILED(rc)) {
         threadClose(&window->sound_thread);
-        audrvClose(&window->driver);
-        audrenExit();
+        audoutStopAudioOut();
+        audoutExit();
         free(window->pool);
         window->pool = nullptr;
         why = "the sound's thread didn't start: " + std::to_string(rc);
         return false;
     }
     window->sound_open = true;
-    fprintf(stderr, "nx: sound open: %u Hz stereo, %d pieces of %d frames\n", SA_PC_SOUND_RATE, PIECES, PIECE);
+    fprintf(stderr, "nx: sound open: the game's %u Hz resampled to %u Hz, %d buffers of %d frames\n",
+            SA_PC_SOUND_RATE, window->out_rate, PIECES, PIECE);
     return true;
 }
 
@@ -385,8 +416,8 @@ void window_sound_close(Window *window)
     window->sound_stop = true;
     threadWaitForExit(&window->sound_thread);
     threadClose(&window->sound_thread);
-    audrvClose(&window->driver);
-    audrenExit();
+    audoutStopAudioOut();
+    audoutExit();
     free(window->pool);
     window->pool = nullptr;
     window->sound_open = false;
