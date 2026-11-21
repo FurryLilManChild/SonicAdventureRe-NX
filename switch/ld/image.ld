@@ -14,6 +14,7 @@ PHDRS
 SECTIONS
 {
 	PROVIDE_HIDDEN( __start__ = IMAGE_BASE );
+	PROVIDE( __executable_start = __start__ );
 
 	/* =========== CODE section =========== */
 	. = __start__;
@@ -48,6 +49,7 @@ SECTIONS
 		KEEP( *(.fini) )
 		. = ALIGN(8);
 	} :code
+	PROVIDE( etext = . );
 
 	/* =========== RODATA section =========== */
 	. = ALIGN(0x1000);
@@ -183,6 +185,8 @@ SECTIONS
 
 	PROVIDE_HIDDEN( __bss_start__ = ADDR(.bss) );
 	PROVIDE_HIDDEN( __bss_end__   = __tls_end  );
+	PROVIDE( end = __bss_end__ );
+	PROVIDE( _end = __bss_end__ );
 
 	PROVIDE_HIDDEN( __end__ = . );
 

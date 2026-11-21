@@ -1,0 +1,259 @@
+diff --git a/engine/mk/native.mk b/engine/mk/native.mk
+index 308e865..200c8ac 100644
+--- a/engine/mk/native.mk
++++ b/engine/mk/native.mk
+@@ -119,6 +119,13 @@ NATIVE_DOMAIN ?= 0
+ # refs.py: the port's pass that retypes references as 32-bit integers (tools/ref32), so the IR no
+ # longer needs x86's 32-bit pointers. Unset, it does nothing
+ NATIVE_LOWER ?= true
++# SonicAdventureRe-nx: the libraries stubs.py takes the host's names from, where they aren't the
++# build machine's glibc (the Switch's newlib and libnx, and its runtime's objects)
++NATIVE_STUB_LIBRARIES ?=
++# SonicAdventureRe-nx: the window the image links for, where it isn't NATIVE_DOMAIN: the Switch
++# build gives refs.py a marker for NATIVE_DOMAIN, which its lowering swaps for a symbol, and links
++# the anchors and the stubs' fixed names in window NATIVE_LINK_DOMAIN
++NATIVE_LINK_DOMAIN ?= $(NATIVE_DOMAIN)
+ NATIVE_CHECK ?=
+ NATIVE_REFS := --base $(NATIVE_DOMAIN) $(NATIVE_CHECK)
+ # NATIVE_EXPLORE=1, from the environment too, builds past what the slice's
+@@ -424,7 +431,7 @@ $(NATIVE_ANCHORS): $(NATIVE_MEMORY) $(filter config/%,$(TABLES)) engine/mk/nativ
+ 			for name, at in names.items()]' > $@.tmp && mv $@.tmp $@
+ NATIVE_DEFSYM := $(if $(NATIVE_WINDOWS),--defsym ,-Wl$(comma)--defsym$(comma))
+ native_anchors = $$(awk -v p=$1 '$$1 == p { print $$2, $$3 }' $(NATIVE_ANCHORS) | \
+-	while read name at; do printf ' $(NATIVE_DEFSYM)%s=0x%x' $$name $$(($(NATIVE_DOMAIN) + at)); done)
++	while read name at; do printf ' $(NATIVE_DEFSYM)%s=0x%x' $$name $$(($(NATIVE_LINK_DOMAIN) + at)); done)
+ NATIVE_PARTIAL := $(if $(NATIVE_WINDOWS),python3 engine/tools/coff.py -r,$(NATIVE_CC) $(NATIVE_ARCH) -r -nostdlib \
+ 	-Wl$(comma)-d)
+ $(NATIVE_PROGRAMS:%=$(NATIVE)/program-%.r): $(NATIVE)/program-%.r: $(NATIVE_OBJ) $(NATIVE_ANCHORS) $(NATIVE_COFF) \
+@@ -472,7 +479,7 @@ $(NATIVE)/stubs.c: $(NATIVE_LINK_OBJ) engine/tools/stubs.py engine/native/stubs.
+ 		$(foreach i,advertise b_robo b_e101_r loader,config/$i/splits.txt) $(NATIVE_LINKED) $(NATIVE_EXPLORED)
+ 	@$(call status,stubs,$@)
+ 	$(Q)NM=$(NATIVE_NM) python3 engine/tools/stubs.py $@ $(NATIVE_LINK_OBJ) --aliases $(NATIVE)/aliases.txt \
+-		--base $(NATIVE_DOMAIN) $(if $(NATIVE_WINDOWS),--libraries $(NATIVE_LIBRARIES)) $(NATIVE_EXPLORING)
++		--base $(NATIVE_LINK_DOMAIN) $(if $(NATIVE_WINDOWS),--libraries $(NATIVE_LIBRARIES),$(if $(NATIVE_STUB_LIBRARIES),--libraries $(NATIVE_STUB_LIBRARIES))) $(NATIVE_EXPLORING)
+ # Windows' C library: the UCRT's, mingw's, its POSIX clocks' and compiler-rt's
+ NATIVE_LIBRARIES = $(addprefix $(LLVM_MINGW)/x86_64-w64-mingw32/lib/,libucrt.a libmingwex.a libmingw32.a \
+ 	libwinpthread.a libkernel32.a) $(wildcard $(LLVM_MINGW)/lib/clang/*/lib/windows/libclang_rt.builtins-x86_64.a)
+diff --git a/engine/native/runner.c b/engine/native/runner.c
+index 11e753c..91df993 100644
+--- a/engine/native/runner.c
++++ b/engine/native/runner.c
+@@ -36,6 +36,8 @@
+ #include <string.h>
+ #ifdef _WIN32
+ #include <windows.h>
++#elif defined(NATIVE_NX)
++#include <unistd.h>
+ #else
+ #include <signal.h>
+ #include <sys/mman.h>
+@@ -77,7 +79,27 @@ static void (*vsync_function)(void);
+ 
+ /* the host's maps, each 1 where it holds. zeros maps only where nothing
+  * lies, and every ram_view maps the same pages of main RAM */
+-#ifdef _WIN32
++#if defined(NATIVE_NX)
++/* SonicAdventureRe-nx: the Switch's maps, switch/runtime/nx_domain.c: code
++ * memory from the heap at a chosen address, and views of main RAM's */
++int nx_zeros(void *at, size_t size);
++int nx_ram_view(void *at, size_t size);
++int nx_code(void *at, size_t size);
++static int zeros(void *at, size_t size)
++{
++    return nx_zeros(at, size);
++}
++
++static int ram_view(void *at)
++{
++    return nx_ram_view(at, RAM_SIZE);
++}
++
++static int code(void *at, size_t size)
++{
++    return nx_code(at, size);
++}
++#elif defined(_WIN32)
+ static int zeros(void *at, size_t size)
+ {
+     return VirtualAlloc(at, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) ==
+@@ -294,7 +316,18 @@ void njSetVSyncFunction(void (*function)(void))
+     vsync_function = function;
+ }
+ 
+-#ifdef _WIN32
++#if defined(NATIVE_NX)
++/* SonicAdventureRe-nx: on the Switch, switch/runtime/nx_main.c's exception
++ * handler logs a fault, and the loader has placed the image already */
++static void catch_faults(void)
++{
++}
++
++static void fix_addresses(char **argv)
++{
++    (void)argv;
++}
++#elif defined(_WIN32)
+ /* a fault in the image's code ends the run, as a signal does on Linux.
+  * another module's fault goes on to its handlers: a driver may catch its
+  * own */
+diff --git a/engine/native/symbols.c b/engine/native/symbols.c
+index 377c45f..c49977f 100644
+--- a/engine/native/symbols.c
++++ b/engine/native/symbols.c
+@@ -4,7 +4,50 @@
+ #include <link.h>
+ #include <stdint.h>
+ #include <string.h>
++#ifdef NATIVE_NX
++/* SonicAdventureRe-nx: the Switch has no file maps. the file is read whole
++ * into the heap, where it stays, as the map would */
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++#define PROT_READ 1
++#define MAP_PRIVATE 2
++#define MAP_FAILED ((void *)-1)
++static void *mmap(void *at, size_t size, int prot, int flags, int fd, long off)
++{
++    char *bytes = malloc(size);
++    size_t got = 0;
++
++    (void)at;
++    (void)prot;
++    (void)flags;
++    if (!bytes || lseek(fd, off, SEEK_SET) < 0) {
++        free(bytes);
++        return MAP_FAILED;
++    }
++    while (got < size) {
++        ssize_t n = read(fd, bytes + got, size - got);
++        if (n <= 0) {
++            free(bytes);
++            return MAP_FAILED;
++        }
++        got += (size_t)n;
++    }
++    return bytes;
++}
++static int munmap(void *at, size_t size)
++{
++    (void)size;
++    free(at);
++    return 0;
++}
++/* the image's ELF, which switch/runtime/nx_main.c names */
++extern const char *nx_program_path;
++#define SELF_PATH nx_program_path
++#else
+ #include <sys/mman.h>
++#define SELF_PATH "/proc/self/exe"
++#endif
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
+@@ -127,7 +170,7 @@ static int read_file(const char *path)
+ int native_read_symbols(void)
+ {
+     static int done;
+-    int failed = done ? 0 : read_file("/proc/self/exe");
++    int failed = done ? 0 : read_file(SELF_PATH);
+ 
+     done = !failed;
+     return failed;
+diff --git a/engine/native/threads.c b/engine/native/threads.c
+index ed9048f..1d2eaf5 100644
+--- a/engine/native/threads.c
++++ b/engine/native/threads.c
+@@ -15,6 +15,11 @@
+ #include <string.h>
+ #ifdef _WIN32
+ #include <windows.h>
++#elif defined(NATIVE_NX)
++/* SonicAdventureRe-nx: the Switch has no ucontext; the domain's pages come
++ * from switch/runtime/nx_domain.c */
++int nx_place(void *at, size_t size);
++int nx_guard(void *at, size_t size);
+ #else
+ #include <sys/mman.h>
+ #include <ucontext.h>
+@@ -160,6 +165,80 @@ static int guard(void *at, size_t size)
+ {
+     return VirtualFree(at, size, MEM_DECOMMIT) != 0;
+ }
++#elif defined(NATIVE_NX)
++/* SonicAdventureRe-nx: on the Switch a context is a stack pointer too, as on
++ * Windows. native_switch keeps AArch64's callee-saved registers, x19 to x30
++ * and d8 to d15, on the stack it leaves */
++void native_switch(void **from, void *to);
++__asm__(".text\n"
++        ".globl native_switch\n"
++        ".type native_switch, %function\n"
++        "native_switch:\n"
++        "    sub sp, sp, #160\n"
++        "    stp x19, x20, [sp, #0]\n"
++        "    stp x21, x22, [sp, #16]\n"
++        "    stp x23, x24, [sp, #32]\n"
++        "    stp x25, x26, [sp, #48]\n"
++        "    stp x27, x28, [sp, #64]\n"
++        "    stp x29, x30, [sp, #80]\n"
++        "    stp d8, d9, [sp, #96]\n"
++        "    stp d10, d11, [sp, #112]\n"
++        "    stp d12, d13, [sp, #128]\n"
++        "    stp d14, d15, [sp, #144]\n"
++        "    mov x2, sp\n"
++        "    str x2, [x0]\n"
++        "    mov sp, x1\n"
++        "    ldp x19, x20, [sp, #0]\n"
++        "    ldp x21, x22, [sp, #16]\n"
++        "    ldp x23, x24, [sp, #32]\n"
++        "    ldp x25, x26, [sp, #48]\n"
++        "    ldp x27, x28, [sp, #64]\n"
++        "    ldp x29, x30, [sp, #80]\n"
++        "    ldp d8, d9, [sp, #96]\n"
++        "    ldp d10, d11, [sp, #112]\n"
++        "    ldp d12, d13, [sp, #128]\n"
++        "    ldp d14, d15, [sp, #144]\n"
++        "    add sp, sp, #160\n"
++        "    ret\n");
++
++typedef void *saved;
++
++/* native_switch's frame: 160 bytes, x30 at 88 */
++#define FRAME_BYTES 160
++
++/* a stack whose switch returns into entry, at the stack's top, 16-aligned,
++ * with zeros for the registers it restores and a null frame pointer */
++static void make(saved *self, char *stack, size_t size, void (*entry)(void))
++{
++    uintptr_t top = ((uintptr_t)stack + size) & ~(uintptr_t)15;
++    void **sp = (void **)(top - FRAME_BYTES);
++
++    memset(sp, 0, FRAME_BYTES);
++    sp[11] = (void *)entry;
++    *self = sp;
++}
++
++static void swap(saved *from, saved *to)
++{
++    native_switch(from, *to);
++}
++
++static void jump(saved *to)
++{
++    void *left;
++
++    native_switch(&left, *to);
++}
++
++static int place(void *stack, size_t size)
++{
++    return nx_place(stack, size);
++}
++
++static int guard(void *at, size_t size)
++{
++    return nx_guard(at, size);
++}
+ #else
+ typedef ucontext_t saved;
+ 

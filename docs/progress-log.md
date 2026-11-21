@@ -2,6 +2,40 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-20: Switch Test 1 built (headless Emerald Coast on Horizon)
+
+- Toolchain (devkitPro's tools run under Wine here, which now crashes): clang for all code, clang
+  20 for the C++ backend (devkitPro's GCC 16 C++ headers defeat clang 18: stl_iterator.h's friend
+  operator-), binutils' AArch64 ld with switch/ld/image.ld (libnx's script at a fixed address),
+  switch-tools' nacptool and elf2nro built from source. tools/a64/clang, A64_SYSTEM=nx: front ends
+  x86-64 against newlib and libnx headers (nx/libc.h hides newlib's strupr; nx/posix.h declares
+  clock_nanosleep; nx/include has elf.h, link.h, dlfcn.h); code for aarch64-none-elf.
+- The domain: refs.py gets a marker, 0x5a5a00000000; Gep32 (GEP32_DOMAIN) swaps constants near it
+  for native_domain_base + offset in code, and for window 5's number inside 32-bit static
+  references (GEP32_LINK_WINDOW). C reaches the symbol (nx/domain.h). 974 modules use it. The
+  first attempt used window 5's own number as the marker; the sweep found an optimizer's packed
+  switch table (race_rival_init, 0x500090002) in that range, proof such a constant could be
+  mistaken. Built both ways, the image was byte-identical, so the old pass had swapped nothing
+  wrongly; the marker removes the risk.
+- The image links once for window 5 with --emit-relocs; mkimage.py's relocation-list mode takes
+  every ABS64 in the window and every .got word (66,482), and agrees exactly with the two-link
+  method on probe 2's payload (363 and 363). The two-link method can't do the game: trunc(sym -
+  base) needs the link window's base in 32 bits.
+- patches/decomp/0003-horizon.patch: runner.c (maps through switch/runtime/nx_domain.c, no
+  signals or re-exec), threads.c (an AArch64 native_switch as Windows' path has), symbols.c (reads
+  the ELF from the SD card), native.mk (NATIVE_STUB_LIBRARIES, NATIVE_LINK_DOMAIN).
+  tools/apply_patches.sh now checks layered patches in a scratch worktree.
+- switch/: loader/main.c (the NRO: picks a window clear of the heap, alias and stack regions and
+  of mapped pages for all 13 of the runtime's ranges, places the image, starts it with
+  loader_return as its return address, which unmaps the image before hbloader), runtime/nx_main.c
+  (logs, heartbeat at priority 0x2b, crash log with the window's distance for addr2line, _exit
+  moved off the domain's stack, the domain's maps undone), runtime/nx_domain.c, runtime/nx_libc.c,
+  tools/preflight.py (PASS: no fixed window address in code; no marker left in 3,018 modules'
+  lowered IR; the loader's ranges match runner.c, threads.c, shim.c; 92 MB image in 256 MB;
+  306,668 symbols with the 9 statics; one build).
+- Disc for the SD card: tools/extract_disc.py from the owner's track 3 on his PC: 2,106 files, 973 MB;
+  all 258 files of the decomp's SHA256SUMS match.
+
 ## 2026-11-20: probe 2 on the owner's Switch (2 launches): the Switch design holds
 
 - Window choice clear of the heap and alias regions: usable windows 1 2 8-15, then 1 2 6-11 15;

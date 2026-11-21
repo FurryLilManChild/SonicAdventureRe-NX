@@ -1,31 +1,75 @@
 #!/bin/sh
-# SonicAdventureRe-nx: the decomp's NATIVE_CC (clang, found first on PATH) for an AArch64 Linux
-# build. Steps that read C (preprocess, dependencies, C to LLVM IR) stay x86-64, the only target
-# with 32-bit __ptr32 pointers, but read AArch64 glibc's headers so system structs have AArch64
+# SonicAdventureRe-nx: the decomp's NATIVE_CC (clang, found first on PATH) for AArch64 builds.
+# Steps that read C (preprocess, dependencies, C to LLVM IR) stay x86-64, the only target with
+# 32-bit __ptr32 pointers, but read the AArch64 system's headers so its structs have AArch64
 # layouts. Steps that make machine code (IR or C to objects, links, crt lookups) target AArch64.
+#   A64_SYSTEM=linux (default): AArch64 glibc (the qemu proof).
+#   A64_SYSTEM=nx: the Switch, newlib and libnx from devkitPro; the domain is native_domain_base,
+#     a symbol the link places, so the image can move by whole windows (nx/domain.h).
 real=${A64_REAL_CLANG:-/usr/bin/clang++}
 here=$(cd "$(dirname "$0")" && pwd)
-sysinc=${A64_SYSROOT:-/usr/aarch64-linux-gnu}/include
+system=${A64_SYSTEM:-linux}
 front=0
+cxx=0
+case "$real" in *++) cxx=1 ;; esac
 for a; do
     case "$a" in
         --version|-print-resource-dir) exec "$real" "$@" ;;
         -emit-llvm|-E|-M|-MM) front=1 ;;
     esac
 done
-if [ $front = 1 ]; then
-    exec "$real" -DNATIVE_A64 \
-    -D__builtin_va_list=__builtin_ms_va_list -D__builtin_va_start=__builtin_ms_va_start \
-    -D__builtin_va_end=__builtin_ms_va_end -D__builtin_va_copy=__builtin_ms_va_copy \
-    -mlong-double-64 -nostdlibinc -isystem "$here/include" -isystem "$sysinc" "$@"
-fi
-# x86-only flags have no meaning here
+# arguments rewritten for every step: the domain's number becomes the symbol on the Switch, and
+# x86-only flags go where the code is AArch64's
 n=$#
 while [ $n -gt 0 ]; do
     a=$1; shift; n=$((n - 1))
     case "$a" in
-        -mfma|-msse*|-mavx*|-mf16c|-mbmi*|-mlzcnt|-mpopcnt) ;;
+        -DNATIVE_DOMAIN=*)
+            if [ "$system" = nx ]; then
+                set -- "$@" "-DNATIVE_DOMAIN=((unsigned long long)(unsigned long)native_domain_base)" \
+                    -include "$here/nx/domain.h"
+            else
+                set -- "$@" "$a"
+            fi ;;
+        -mfma|-msse*|-mavx*|-mf16c|-mbmi*|-mlzcnt|-mpopcnt)
+            [ $front = 1 ] && set -- "$@" "$a" ;;
         *) set -- "$@" "$a" ;;
     esac
 done
+if [ "$system" = nx ]; then
+    a64=${DEVKITA64_LIBS:-/opt/devkitpro-win/devkitA64}
+    dkp=${DEVKITPRO:-/opt/devkitpro}
+    newlib="-isystem $here/nx/include -isystem $a64/aarch64-none-elf/include -isystem $dkp/libnx/include"
+    defs="-DNATIVE_A64 -DNATIVE_NX -D__SWITCH__ -D_CLOCKS_PER_SEC_=100"
+    hosted=""
+    case " $* " in
+        *" -nostdinc "*|*" -ffreestanding "*) ;;
+        *) if [ $cxx = 0 ]; then hosted="-include $here/nx/libc.h -include $here/nx/posix.h"
+           else hosted="-include $here/nx/posix.h"; fi ;;
+    esac
+    if [ $front = 1 ]; then
+        exec "$real" $defs $hosted \
+            -D__builtin_va_list=__builtin_ms_va_list -D__builtin_va_start=__builtin_ms_va_start \
+            -D__builtin_va_end=__builtin_ms_va_end -D__builtin_va_copy=__builtin_ms_va_copy \
+            -mlong-double-64 -nostdlibinc $newlib "$@"
+    fi
+    cxxinc=""
+    if [ $cxx = 1 ]; then
+        # devkitPro's C++ headers come from GCC 16, which clang 18 can't parse (a friend's
+        # trailing return type in stl_iterator.h): clang 20 compiles the C++. And g++ defines
+        # _GNU_SOURCE in C++, which newlib reads to show POSIX's names under -std=c++17
+        real=${A64_REAL_CLANGXX_NX:-/usr/bin/clang++-20}
+        defs="$defs -D_GNU_SOURCE"
+        v=$(ls "$a64/aarch64-none-elf/include/c++" | tail -1)
+        cxxinc="-isystem $a64/aarch64-none-elf/include/c++/$v -isystem $a64/aarch64-none-elf/include/c++/$v/aarch64-none-elf"
+    fi
+    exec "$real" --target=aarch64-none-elf -march=armv8-a+crc+crypto -mtune=cortex-a57 -fno-pic \
+        -Wno-unused-command-line-argument $defs -nostdlibinc $cxxinc $newlib $hosted "$@"
+fi
+if [ $front = 1 ]; then
+    exec "$real" -DNATIVE_A64 \
+    -D__builtin_va_list=__builtin_ms_va_list -D__builtin_va_start=__builtin_ms_va_start \
+    -D__builtin_va_end=__builtin_ms_va_end -D__builtin_va_copy=__builtin_ms_va_copy \
+    -mlong-double-64 -nostdlibinc -isystem "$here/include" -isystem "${A64_SYSROOT:-/usr/aarch64-linux-gnu}/include" "$@"
+fi
 exec "$real" --target=aarch64-linux-gnu -Wno-unused-command-line-argument "$@"
