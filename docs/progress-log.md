@@ -2,6 +2,28 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: test be54505 read: saves work, audout plays, 60 fps is not held (my readback)
+
+- Saving works: three "storage: saved .../card.bin, 131072 bytes, read back the same", and the
+  next start loaded the save (file select, then Emerald Coast).
+- audout runs: buffers played and returned at about 47 a second (48000 / 1024), all run long,
+  none missing; buffers in memory type 0x5 (heap), RW.
+- Speed: the owner saw Emerald Coast below 60, and he was right. The heartbeat's game clock ran at
+  43 to 54 vsyncs a real second for most of the level, and the on-screen counter agreed (39 to 54,
+  60 only in stretches). My earlier "60.0 pictures a second" counted pictures per 2,000 game
+  vsyncs, not per real second; the game's own clock had fallen behind real time, which play.c's
+  late and lost counts showed (every picture late). I dismissed them; that was wrong.
+- Leading cause: the captures. play.c reads each picture back through sa_pc_read, which waits
+  (raster.wait) for the picture just submitted, including its wait for a swapchain image under
+  FIFO. That serializes the game's thread and the GPU every frame. Per picture: give median 4.8 ms,
+  end 1.5, CPU 4.5, GPU 3.9 (p99 7.4), so overlapped they fit 16.7 ms; serialized with the vsync
+  wait they don't. Not yet proven: the next build reads each picture one late (its fence long
+  signaled) and lets both stick clicks turn recording off and on, to compare in one session.
+- The face: upstream 004279f renders the same scattered face in the same pictures (1560 to 1575 of
+  the Chaos 0 run). It is unfixed upstream; ours to find in the shape motion code.
+- Pause on PC by key script is not a valid test: scripted keys count as a recording, and Start
+  then ends the act (stage.c) rather than pausing. Pause stays to be traced on the Switch.
+
 ## 2026-11-21: Sonic's face is the decomp's own bug (PC comparison); pause under study
 
 - The decomp at our pin (e9a6f8a), built unchanged for x86-64 Linux in a separate worktree
