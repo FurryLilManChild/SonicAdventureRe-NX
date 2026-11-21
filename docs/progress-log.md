@@ -2,6 +2,28 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: test 5f3d5d3 read (16:9, 60 fps, captures)
+
+- Settings in force logged: aspect 16:9, fps 60, vsync 1, sound 1, resolution 1. Clocks
+  1020/307/1331 MHz handheld throughout.
+- Saving still failed ("can't write the card", 5 times). Cause found in the code: with a window,
+  card.c's store() goes through the engine's storage (sa_storage_write, engine/pc/storage.cpp),
+  not filed(), which patch 0004 fixed. storage.cpp writes NAME.new and renames it onto NAME,
+  which FAT refuses once the card exists (the first write of a fresh card worked in the a6b0060
+  run). Pausing still showed the card error, as expected while saves fail.
+- Sound: the thread runs (about 195 loops a second), rendered its first 4 pieces and queued them;
+  the voice then played 0 samples and no piece ever came back (state Done), all run long. Every
+  setup call returned 0. The audio renderer path is failing silently; cause unknown.
+- Replays work: 3 saved (4.1 to 5.2 s each, 110 MB), the ring's copy costs 0.42 ms a picture.
+  replay_002 shows Sonic's face in the Station Square close-up: some pictures whole with the mouth
+  moving, others with the face's points scattered. That is the shape motion (action.c's
+  action_shape_*, the mouth morph). Not yet known whether the AArch64 port or the decomp itself
+  is at fault.
+- Pictures a second, from the times file: Emerald Coast acts 1 and 2 at 60.0 (game thread
+  median 5.8 ms, 99th 14-15; GPU median 4.0, 99th 7-9); cutscenes at 30; Chaos 0 at 33 to 45
+  with CPU and GPU about 5 to 6 ms, so not limited by time. The late and lost vsync counts are
+  not meaningful under FIFO vsync (play.c's own clock runs behind the blocking present).
+
 ## 2026-11-21: first-picture test read; saving, sound and captures for the next test
 
 - Test a6b0060 on the owner's Switch (handheld; clocks CPU 1020, GPU 307, memory 1331 MHz): the
