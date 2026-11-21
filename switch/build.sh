@@ -95,7 +95,14 @@ aarch64-linux-gnu-ld -T switch/ld/switch.ld -pie --no-dynamic-linker --gc-sectio
     --wrap=envSetup "$GCC/crti.o" "$GCC/crtbegin.o" "$B/loader.o" -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" \
     -L"$GCC" --start-group -lnx -lc -lm -lgcc -lsysbase --end-group "$GCC/crtend.o" "$GCC/crtn.o" -o "$B/loader.elf"
 "$TOOLS/nacptool" --create "SonicAdventureRe-nx" "FurryLilManChild" "0.0.1-$commit" "$B/loader.nacp"
-"$TOOLS/elf2nro" "$B/loader.elf" "$B/SonicAdventureRe-nx.nro" --nacp="$B/loader.nacp"
+# the icon is the owner's image, kept out of git (assets/ is ignored); a copy lies in his
+# C:\SonicAdventureRe-nx\assets\icon.jpg (256x256 JPEG)
+if [ -f assets/icon.jpg ]; then
+    "$TOOLS/elf2nro" "$B/loader.elf" "$B/SonicAdventureRe-nx.nro" --nacp="$B/loader.nacp" --icon=assets/icon.jpg
+else
+    echo "switch/build.sh: no assets/icon.jpg, so the NRO has no icon (copy it from the owner's assets folder)" >&2
+    "$TOOLS/elf2nro" "$B/loader.elf" "$B/SonicAdventureRe-nx.nro" --nacp="$B/loader.nacp"
+fi
 
 out="$root/out/sd/switch/SonicAdventureRe-nx"
 mkdir -p "$out"
