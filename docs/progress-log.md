@@ -2,6 +2,31 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-20: the window build (Vulkan on NVK): first-picture test prepared
+
+- `switch/runtime/window_nx.cpp` is the decomp's window (engine/pc/window.h) on Horizon, in place
+  of its headless window_none: a VI surface on the default NWindow (VK_NN_vi_surface), 1280x720;
+  the pad from libnx HID, positional (Switch B/A/Y/X as Dreamcast A/B/X/Y, + Start, ZL/ZR and
+  L/R the triggers at 0 or 255, the left stick squared as in SA-nx, the d-pad moving it as on
+  PC); Minus and + together end the game; sound through audrv at 44.1 kHz stereo, four pieces of
+  1024 frames fed from a thread on core 1 at priority 0x2a.
+- The raster opens Vulkan by dlopen/dlsym: nx_libc.c now gives a handle and NVK's
+  vkGetInstanceProcAddr (libvulkan.a, linked statically with libexpat, libzstd and zlib).
+- The link without --gc-sections (the game finds statics by name) left 63 POSIX calls undefined,
+  all named only by NAK's Rust standard library inside libvulkan.a (files, processes, signals).
+  SA-nx's link drops that code with --gc-sections. `nx_posix_stubs.c` gives weak stand-ins that
+  fail with ENOSYS and log the first 16 calls. NVK brings its own posix_memalign, so ours is weak.
+- Preflight check 1 flagged 10 window-5 numbers in NVK's code (GPU method words such as
+  0x0002000500010000, MME value pairs 0x500000001, NAK encoder tables). None carries a relocation,
+  and libvulkan.a was compiled before our link chose window 5, so they are NVK's own constants.
+  The check now exempts unrelocated constants inside libvulkan.a's sections (from the map) and
+  64-bit constants with their top 16 bits set. Preflight passes.
+- `nx_main.c` runs the front door: `play --settings DIR/settings.txt --card DIR/card.bin --window
+  DIR/disc --times DIR/SonicAdventureRe-nx.times.txt`. A first run writes settings.txt with the
+  game's defaults spelled out (4:3, 30 fps, vsync, sound, resolution 1). No console (it would take
+  the window from Vulkan); stdout goes to SonicAdventureRe-nx.out.log; the heartbeat logs vsyncs
+  a second every 5 s.
+
 ## 2026-11-20: Switch Test 2 on the owner's Switch: the game runs, 396 frames, as on PC
 
 - Build 65f655e. Window 1 of 1 8-11 13-15. "code mapped again, executable at 0x1b0000000: 0":

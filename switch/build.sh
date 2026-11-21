@@ -20,6 +20,8 @@ DKP=${DEVKITPRO:-/opt/devkitpro}
 A64=${DEVKITA64_LIBS:-/opt/devkitpro-win/devkitA64}
 GCC=$(ls -d "$A64"/lib/gcc/aarch64-none-elf/* | tail -1)
 TOOLS=${SWITCH_TOOLS:-$HOME/bin}
+NVK=${NVK_SDK:-/opt/nvk-sdk}
+PORTLIBS=${PORTLIBS:-$DKP/portlibs/switch}
 B="$root/switch/build"
 N="$root/decomp/build/engine/native"
 mkdir -p "$B"
@@ -34,6 +36,7 @@ CF="--target=aarch64-none-elf -march=armv8-a+crc+crypto -mtune=cortex-a57 -O2 -g
 clang $CF -fno-pic -c switch/runtime/nx_main.c -o "$B/nx_main.o"
 clang $CF -fno-pic -c switch/runtime/nx_domain.c -o "$B/nx_domain.o"
 clang $CF -fno-pic -c switch/runtime/nx_libc.c -o "$B/nx_libc.o"
+clang $CF -fno-pic -c switch/runtime/nx_posix_stubs.c -o "$B/nx_posix_stubs.o"
 clang --target=aarch64-none-elf -c switch/runtime/nx_base.S -o "$B/nx_base.o"
 
 echo "== the game's objects (the decomp's native slice, for Horizon)"
@@ -61,6 +64,12 @@ link=$(cd decomp && make -n build/engine/native/play 2>/dev/null | grep -- " -o 
 objects=$(printf '%s\n' $link | grep '\.o$' | grep -v -e 'Scrt1\|crti\|crtbegin\|crtend\|crtn' | sed "s|^build/|$root/decomp/build/|")
 wraps=$(printf '%s\n' $link | grep -- '--wrap=' | sed 's|^-Wl,||')
 aliases=$(awk '{ printf " --defsym=%s=%s", $1, $2 }' "$N/aliases.txt")
+# the window is switch/runtime/window_nx.cpp's (a VI surface for NVK, libnx's pad and audio
+# renderer), in place of the decomp's headless window_none
+"$CXX" -std=c++17 -O2 -g -Wall -Wextra -Idecomp/engine/include -Idecomp/engine/pc -isystem "$NVK/include" \
+    -c switch/runtime/window_nx.cpp -o "$B/window_nx.o"
+printf '%s\n' $objects | grep -q '/window_none\.o$' || { echo "switch/build.sh: no window_none.o in the link" >&2; exit 1; }
+objects=$(printf '%s\n' $objects | sed "s|^.*/window_none\.o$|$B/window_nx.o|")
 # runner.c's main is the game's; switch/runtime/nx_main.c's main runs it
 aarch64-linux-gnu-objcopy --redefine-sym main=native_main "$N/obj/engine/native/runner.o" "$B/runner.o"
 objects=$(printf '%s\n' $objects | sed "s|$N/obj/engine/native/runner.o|$B/runner.o|")
@@ -68,9 +77,10 @@ objects=$(printf '%s\n' $objects | sed "s|$N/obj/engine/native/runner.o|$B/runne
 echo "== the link, for window 5, with its relocations kept"
 aarch64-linux-gnu-ld -T switch/ld/image.ld --defsym=IMAGE_BASE=0x500400000 --defsym=syCacheICI_P2_=0x5b0000000 \
     $aliases $wraps --wrap=_exit --wrap=exit -no-pie -z now --build-id=none --emit-relocs -Map="$B/SonicAdventureRe-nx.map" \
-    "$GCC/crti.o" "$GCC/crtbegin.o" $objects "$B/nx_main.o" "$B/nx_domain.o" "$B/nx_libc.o" "$B/nx_base.o" \
+    "$GCC/crti.o" "$GCC/crtbegin.o" $objects "$B/nx_main.o" "$B/nx_domain.o" "$B/nx_libc.o" "$B/nx_base.o" "$B/nx_posix_stubs.o" \
     -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" -L"$GCC" \
-    --start-group -lstdc++ -lm -lnx -lc -lgcc -lsysbase --end-group "$GCC/crtend.o" "$GCC/crtn.o" \
+    --start-group "$NVK/lib/libvulkan.a" "$NVK/lib/libexpat.a" "$NVK/lib/libzstd.a" "$PORTLIBS/lib/libz.a" \
+    -lstdc++ -lm -lnx -lc -lgcc -lsysbase --end-group "$GCC/crtend.o" "$GCC/crtn.o" \
     -o "$B/SonicAdventureRe-nx.full.elf"
 python3 switch/tools/mkimage.py "$B/SonicAdventureRe-nx.full.elf" "$B/SonicAdventureRe-nx.img"
 # the game reads its symbol table from this file (symbols.c): the table alone, the rest as NOBITS

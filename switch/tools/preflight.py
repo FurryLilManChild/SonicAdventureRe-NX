@@ -18,6 +18,7 @@ Checks, each named in the output with PASS or FAIL:
   5. the game's ELF keeps its symbol table and every static records.c finds by name;
   6. the loader and the image are the build of COMMIT (preflight.py BUILD_DIR COMMIT).
 """
+import bisect
 import re
 import struct
 import subprocess
@@ -62,14 +63,44 @@ def main():
     # 1. code
     dis = run('aarch64-linux-gnu-objdump', '-d', '--no-show-raw-insn', str(full)).splitlines()
     window_hi = link >> 32
-    bad, tables, stores = [], 0, 0
+    bad, tables, stores, wide, library = [], 0, 0, 0, 0
+    # NVK's code (libvulkan.a), from the link's map: its constants were compiled before our link
+    # chose window 5, so one with no relocation on it is NVK's own number, never a window address
+    nvk = []
+    lines = (build / 'SonicAdventureRe-nx.map').read_text(errors='replace').splitlines()
+    for i, l in enumerate(lines):
+        m = re.match(r'\s*(?:\.text\S*\s+)?0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+\S*libvulkan\.a\(', l)
+        if m and (l.lstrip().startswith('.text') or lines[i - 1].lstrip().startswith('.text')):
+            a = int(m.group(1), 16)
+            nvk.append((a, a + int(m.group(2), 16)))
+    nvk.sort()
+    starts = [a for a, _ in nvk]
+    relocated = set()
+    for l in run('aarch64-linux-gnu-readelf', '-rW', str(full)).splitlines():
+        m = re.match(r'\s*([0-9a-f]{8,16})\s+[0-9a-f]+\s+R_AARCH64_MOVW', l)
+        if m:
+            relocated.add(int(m.group(1), 16))
+
+    def in_nvk(addr):
+        k = bisect.bisect_right(starts, addr) - 1
+        return k >= 0 and nvk[k][0] <= addr < nvk[k][1]
+
     for k, l in enumerate(dis):
         m = (re.search(rf'\bmovk\s+(x\d+), #0x{window_hi:x}, lsl #32\b', l) or
              re.search(rf'\bmov\s+(x\d+), #0x{window_hi:x}[0-9a-f]{{8}}\b', l))
         if not m:
             continue
         reg = m.group(1)
+        addr = int(l.split(':')[0], 16)
+        if in_nvk(addr) and addr not in relocated:
+            library += 1
+            continue
         after = dis[k + 1:k + 12]
+        # a constant whose top 16 bits are set next (movk xD, #N, lsl #48, N nonzero) is no address:
+        # the address space is 36 bits (NVK's GPU method words are such constants)
+        if any(re.search(rf'\bmovk\s+{reg}, #0x[1-9a-f][0-9a-f]*, lsl #48\b', a) for a in after[:4]):
+            wide += 1
+            continue
         # a packed table is shifted by a register soon after: lsr/lsl/asr xD, <reg>, xS
         if any(re.search(rf'\b(lsr|lsl|asr)\s+[xw]\d+, {reg}, [xw]\d+', a) for a in after[:5]):
             tables += 1
@@ -82,7 +113,9 @@ def main():
     check('1. no fixed window address in code', not bad,
           f'{len(bad)} instructions, first: {bad[0]}' if bad else
           f'no absolute relocation in code (mkimage); window-5 numbers in code: {tables} packed switch tables '
-          f'(shifted) and {stores} merged stores of two 32-bit fields, not addresses (none used as one)')
+          f'(shifted), {stores} merged stores of two 32-bit fields and {wide} 64-bit constants with their top bits '
+          f'set, not addresses (none used as one); {library} of NVK\'s own constants (no relocation, in '
+          f'{len(nvk)} sections of libvulkan.a)')
 
     # 2. the marker, where it would show: the lowered IR of every module (the image's data can't
     #    tell, since a table of 32-bit fields can hold 0x5a5a beside a 0)
