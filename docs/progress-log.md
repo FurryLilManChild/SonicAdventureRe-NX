@@ -2,6 +2,25 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: Sonic's face is the decomp's own bug (PC comparison); pause under study
+
+- The decomp at our pin (e9a6f8a), built unchanged for x86-64 Linux in a separate worktree
+  (build/gen copied from the Switch build, make pc, then build/engine/native/play), rendered
+  headless on lavapipe: `play --headless orig --pictures DIR --card FILE orig 4500 15 0`
+  (Chaos 0 from its start, 36 s for 1,500 vsyncs). In the entry event's close-up of Sonic
+  talking (pictures 1500 to 1590), most pictures move the mouth whole and some scatter the face's
+  points exactly as the Switch replay_002 showed. So the shape motion bug is in the decomp, not
+  in the AArch64 lowering or the Switch runtime.
+- Upstream has one newer commit, 004279f (Nov 20, "Adds faster trig, clean fps counter, bug
+  fixes"); its notes name no face fix. It is being built in the same worktree to render the same
+  scene.
+- Pause on the Switch (build be54505, the owner): no menu shows, and + again leaves (Emerald Coast to
+  the field, the field to the title), so pause_choice was not PAUSE_CONTINUE at the second press.
+  stage_run_paused moves it only on pad_press_repeat KU or KD (the d-pad, or the stick past 78).
+  Next: a key script pausing in Emerald Coast on the PC build, to see whether the PC shows the
+  menu and resumes.
+- Saving appears to work on be54505 (the owner); the log's storage lines are still to be read.
+
 ## 2026-11-21: saving through the engine's storage, sound on audout, frame counter
 
 - Patch 0005: storage.cpp (the writer a windowed run's card uses) on __SWITCH__ removes the old
