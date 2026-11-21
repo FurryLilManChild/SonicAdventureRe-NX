@@ -43,7 +43,7 @@ extern volatile unsigned long nx_sound_returned, nx_sound_waits_empty;
 double nx_capture_copy_ms(void);
 extern int nx_capture_wide;
 extern int nx_capture_enabled;
-extern int nx_volume, nx_resolution, nx_settings_capture, nx_overlay_on;
+extern int nx_volume, nx_resolution, nx_settings_capture, nx_overlay_on, nx_halves;
 extern volatile int nx_overlay_fps;
 
 // the clocks now, in MHz: CPU, GPU, memory (sys-clk can change them during a run)
@@ -203,8 +203,10 @@ static const char default_settings[] =
     "fps 60\n"
     "vsync 1\n"
     "sound 1\n"
-    "# the picture's size: 1 is the Dreamcast's 640x480, 2 is twice that, 0 fits the screen\n"
+    "# the decomp's picture size, kept at 1; the port's own resolution is scale below\n"
     "resolution 1\n"
+    "# the port's resolution: 1x (640x480), 1.5x (960x720) or 2x (1280x960)\n"
+    "scale 1x\n"
     "# the port's captures for Claude (stick clicks): 1 on, 0 off; on costs speed\n"
     "capture 0\n"
     "# the port's own: sound volume in percent, the frame counter 1 on 0 off\n"
@@ -219,6 +221,7 @@ static void settings_log(const char *path)
     if (!f)
         return;
     char text[256];
+    int scale_seen = 0;
     line("settings (%s):\n", path);
     while (fgets(text, sizeof text, f)) {
         char *note = strchr(text, '#');
@@ -247,6 +250,10 @@ static void settings_log(const char *path)
                 nx_settings_capture = nx_capture_enabled = !strcmp(value, "1");
             if (!strcmp(name, "resolution"))
                 nx_resolution = atoi(value);
+            if (!strcmp(name, "scale")) {
+                nx_halves = !strcmp(value, "1.5x") ? 3 : !strcmp(value, "2x") ? 4 : 2;
+                scale_seen = 1;
+            }
             if (!strcmp(name, "volume"))
                 nx_volume = atoi(value);
             if (!strcmp(name, "counter"))
@@ -254,6 +261,10 @@ static void settings_log(const char *path)
         }
     }
     fclose(f);
+    // an older settings file sized the picture with the decomp's resolution alone
+    if (!scale_seen)
+        nx_halves = nx_resolution == 2 ? 4 : 2;
+    line("  (the port's resolution: %s)\n", nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x");
 }
 
 static void settings_exist(const char *path)

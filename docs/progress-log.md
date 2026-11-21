@@ -2,6 +2,19 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: Resolution in the port menu, live
+
+- the owner (test d902b62): the port menu works and looks right; the menu's quit crashes instead of
+  returning to the home menu (logs to come); he wants "Resolution" with 1X, 1.5X and 2X, applied
+  without a restart. 2X held 30 fps but not 60, which he is fine with.
+- Patch 0006: Raster::rescale(halves) sets the target in halves of 640x480 (2, 3, 4: 640x480,
+  960x720, 1280x960); fit, run at every submit with a window, makes the target anew at the next
+  picture (make_target waits for the device first). The backend asks the host's
+  native_resolution_halves at each pad read and passes a change on.
+- nx_menu.c: RESOLUTION 1X, 1.5X, 2X, at once, saved as "scale 1x|1.5x|2x" in settings.txt (the
+  decomp's own resolution line stays 1). A settings file without a scale line takes 2x where its
+  resolution is 2, else 1x, and the log states the resolution in force.
+
 ## 2026-11-21: Sonic's face fixed (on the PC copy): split shape keys
 
 - Cause found on the decomp's x86 build (gdb and logging in player_mouth_blend): in the talking

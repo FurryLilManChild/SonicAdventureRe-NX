@@ -4,8 +4,9 @@
 //
 //   up and down choose, left and right (or A) change, B or + resumes.
 //
-// Widescreen and 60 fps change at once (the decomp's own port toggles); picture size and
-// captures take effect at the next start. Every change is written to settings.txt.
+// Widescreen, 60 fps and resolution change at once (the decomp's own port toggles, and the
+// raster's rescale, patch 0006); captures take effect at the next start. Every change is written
+// to settings.txt.
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,8 +30,20 @@ volatile int nx_menu_open;     // read by the sound thread: quiet while 1
 volatile int nx_menu_request;  // set by the window on Minus and +
 volatile int nx_menu_quit;     // set by Quit: the window then ends the game
 int nx_volume = 100;           // percent, read by the sound thread
-int nx_resolution = 1;         // settings.txt's resolution (0 fits the screen)
+int nx_resolution = 1;         // settings.txt's resolution (the decomp's, kept at 1)
+int nx_halves = 2;             // the port's resolution in halves of 640x480: 2, 3 or 4 (1X to 2X)
 int nx_settings_capture;       // the captures setting for the next start
+
+// the raster asks for the resolution each pad read (patch 0006)
+uint32_t native_resolution_halves(void)
+{
+    return (uint32_t)nx_halves;
+}
+
+static const char *scale_name(int halves)
+{
+    return halves == 3 ? "1.5X" : halves == 4 ? "2X" : "1X";
+}
 
 enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
 
@@ -65,25 +78,26 @@ static void save_settings(void)
             "fps %s\n"
             "vsync 1\n"
             "sound 1\n"
-            "# the picture's size: 1 is the Dreamcast's 640x480, 2 is twice that, 0 fits the screen\n"
+            "# the decomp's picture size, kept at 1; the port's own resolution is scale below\n"
             "resolution %d\n"
+            "# the port's resolution: 1x (640x480), 1.5x (960x720) or 2x (1280x960)\n"
+            "scale %s\n"
             "# the port's captures for Claude (stick clicks): 1 on, 0 off; on costs speed\n"
             "capture %d\n"
             "# the port's own: sound volume in percent, the frame counter 1 on 0 off\n"
             "volume %d\n"
             "counter %d\n",
-            disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", nx_resolution,
-            nx_settings_capture, nx_volume, nx_overlay_on);
+            disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", 1,
+            nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_settings_capture, nx_volume, nx_overlay_on);
     fclose(f);
-    fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %d, capture %d, volume %d, counter %d\n",
-            port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", nx_resolution, nx_settings_capture,
+    fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %s, capture %d, volume %d, counter %d\n",
+            port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", scale_name(nx_halves), nx_settings_capture,
             nx_volume, nx_overlay_on);
 }
 
 // the menu's lines as text, for the overlay (nx_overlay.c)
 int nx_menu_lines(char lines[][40], int most, int *selected)
 {
-    static const char *sizes[3] = {"FIT SCREEN", "640X480", "1280X960"};
     int n = 0;
     if (most < ITEMS + 2)
         return 0;
@@ -92,7 +106,7 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
     snprintf(lines[n++], 40, "RESUME");
     snprintf(lines[n++], 40, "WIDESCREEN      %s", port_toggles[1] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "60 FPS          %s", port_toggles[2] ? "ON" : "OFF");
-    snprintf(lines[n++], 40, "PICTURE SIZE    %s", sizes[nx_resolution < 0 || nx_resolution > 2 ? 1 : nx_resolution]);
+    snprintf(lines[n++], 40, "RESOLUTION      %s", scale_name(nx_halves));
     snprintf(lines[n++], 40, "VOLUME          %d%%", nx_volume);
     snprintf(lines[n++], 40, "FPS COUNTER     %s", nx_overlay_on ? "ON" : "OFF");
     snprintf(lines[n++], 40, "CAPTURES        %s", nx_settings_capture ? "ON" : "OFF");
@@ -106,7 +120,7 @@ const char *nx_menu_hint(void)
 {
     switch (cursor) {
     case ITEM_SIZE:
-        return "TAKES EFFECT AT THE NEXT START";
+        return "2X MAY NOT HOLD 60 FPS";
     case ITEM_CAPTURE:
         return "NEXT START. ON COSTS SPEED";
     default:
@@ -126,16 +140,10 @@ static void change(int step)
         port_toggles[2] = !port_toggles[2];
         port_chosen[2] = 1;
         break;
-    case ITEM_SIZE: {
-        // in the order shown: 640x480 (1), 1280x960 (2), fit (0)
-        static const int order[3] = {1, 2, 0};
-        int at = 0;
-        for (int i = 0; i < 3; i++)
-            if (order[i] == nx_resolution)
-                at = i;
-        nx_resolution = order[(at + (step < 0 ? 2 : 1)) % 3];
+    case ITEM_SIZE:
+        // 1X, 1.5X, 2X, round
+        nx_halves = 2 + (nx_halves - 2 + (step < 0 ? 2 : 1)) % 3;
         break;
-    }
     case ITEM_VOLUME:
         nx_volume += step < 0 ? -10 : 10;
         if (nx_volume < 0)

@@ -26,7 +26,18 @@
  };
  
  /* the words of the fragments' head, as the shaders' Fragments holds them,
-@@ -494,8 +506,50 @@
+@@ -392,6 +404,10 @@
+     float timer_period = 0.0F; /* nanoseconds a tick, 0 where none */
+     uint64_t timer_mask = 0; /* a timestamp's valid bits, each set */
+     uint32_t resolution = 1; /* RasterOptions', 0 only with a window */
++    /* a host's resolution in halves of WIDTH by HEIGHT (3 is 1.5 times),
++     * in place of resolution where nonzero; fit makes the target anew at
++     * the next submit (SonicAdventureRe-nx's port menu) */
++    uint32_t halves = 0;
+     bool wide = false; /* the picture shows 16:9 */
+     VkExtent2D target{}; /* the target's size, which the images below take */
+     VkImage color = VK_NULL_HANDLE;
+@@ -494,8 +510,50 @@
                   VkAccessFlags src, VkAccessFlags dst,
                   VkPipelineStageFlags src_stage,
                   VkPipelineStageFlags dst_stage);
@@ -77,7 +88,18 @@
  uint32_t Raster::Impl::memory_type(uint32_t bits,
                                     VkMemoryPropertyFlags want) const
  {
-@@ -1622,6 +1676,7 @@
+@@ -1333,7 +1391,9 @@
+     VkRect2D shows = region();
+     VkExtent2D want{WIDTH * resolution, HEIGHT * resolution};
+ 
+-    if (resolution == 0) {
++    if (halves != 0) {
++        want = VkExtent2D{WIDTH * halves / 2, HEIGHT * halves / 2};
++    } else if (resolution == 0) {
+         want = shows.extent.width >= WIDTH && shows.extent.height >= HEIGHT
+                    ? shows.extent
+                : shows.extent.width == 0 && target.width != 0
+@@ -1622,6 +1682,7 @@
              r.free_buffer(f.vertices);
              r.free_buffer(f.readback);
              r.free_buffer(f.stats);
@@ -85,7 +107,7 @@
          }
          vk.vkDestroyQueryPool(r.device, r.timer, nullptr);
          for (auto &p : r.pipelines) {
-@@ -2475,6 +2530,7 @@
+@@ -2475,6 +2536,7 @@
          vk.vkCmdBlitImage(
              c, fitted ? r.fitted.image : r.color, VK_IMAGE_LAYOUT_GENERAL, to,
              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
@@ -93,10 +115,15 @@
          r.barrier(c, to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, 1,
                    VK_ACCESS_TRANSFER_WRITE_BIT, 0,
-@@ -2522,6 +2578,129 @@
+@@ -2522,6 +2584,134 @@
      }
      return true;
  }
++
++void Raster::rescale(uint32_t halves)
++{
++    impl_->halves = halves;
++}
 +
 +bool Raster::again(uint32_t frame, std::string &why)
 +{
@@ -225,7 +252,7 @@
  {
 --- a/engine/pc/raster.h
 +++ b/engine/pc/raster.h
-@@ -143,6 +143,10 @@
+@@ -143,6 +143,14 @@
                  const std::vector<Vertex> &vertices,
                  const std::vector<Batch> &batches, bool sorted,
                  std::string &why);
@@ -233,6 +260,10 @@
 +     * it, through frame's slot, which it waits for first: a host's menu
 +     * over a held game (SonicAdventureRe-nx). false with why where it can't */
 +    bool again(uint32_t frame, std::string &why);
++    /* draw the pictures from the next submit at halves halves of WIDTH by
++     * HEIGHT (2 the Dreamcast's, 3 one and a half times, 4 twice), or at
++     * RasterOptions' resolution for 0 */
++    void rescale(uint32_t halves);
      /* show the pictures from the next submit at 16:9 where on, else at 4:3.
       * a window shows them in its largest centered rectangle of that aspect.
       * the picture keeps its WIDTH by HEIGHT coordinates */
@@ -248,7 +279,7 @@
  #include <type_traits>
  
  #include "ninja.h"
-@@ -722,6 +724,11 @@
+@@ -722,6 +724,14 @@
      return result;
  }
  
@@ -256,14 +287,26 @@
 + * while it gives 1, the game waits here and the last picture shows again
 + * each vsync with the host's overlay over it */
 +extern "C" int native_menu_step(void) __attribute__((weak));
++/* a host's resolution in halves of the Dreamcast's (0 for the settings'),
++ * which it may change while the game runs */
++extern "C" uint32_t native_resolution_halves(void) __attribute__((weak));
 +
  sa_result sa_input_sample(sa_engine *engine, uint32_t port, sa_pad *pad)
  {
      if (engine == nullptr || pad == nullptr) {
-@@ -737,6 +744,17 @@
+@@ -737,6 +747,26 @@
          b.quit_sent = true;
          post(*engine, SA_EVENT_QUIT, SA_NULL, 0, engine->tick);
      }
++    if (native_resolution_halves) {
++        static uint32_t applied = UINT32_MAX;
++        uint32_t halves = native_resolution_halves();
++
++        if (halves != applied) {
++            applied = halves;
++            b.raster.rescale(halves);
++        }
++    }
 +    if (native_menu_step) {
 +        while (native_menu_step()) {
 +            std::string why;
