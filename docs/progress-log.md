@@ -2,6 +2,21 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-20: probe 2 on the owner's Switch (2 launches): the Switch design holds
+
+- Window choice clear of the heap and alias regions: usable windows 1 2 8-15, then 1 2 6-11 15;
+  window 1 chosen both times.
+- Game RAM at three addresses: code memory at W+0x0c000000 made RW, svcMapProcessMemory views of
+  it at W+0x8c000000 and W+0xac000000 (all 0); a write through each view read back through the
+  other two (ALL MATCH, including the last word); all unmapped cleanly.
+- Moved image: the payload linked for window 5, moved to window 1 (363 addresses), mapped as code
+  memory with RX/R/RW segments, started with the launcher's entries less the kept heap: it ran
+  its own libnx (console, SD log, a 1 MB malloc) and a moved pointer read back correctly.
+- Not clean: pressing + in the payload crashed instead of returning to the menu, both launches.
+  Theory (unconfirmed): the payload's image is still mapped as code memory over the loader's
+  heap when it returns to hbloader, which then reuses that heap. Fix for the game build: the
+  payload returns through the loader, which unmaps the image first, and logs that it got there.
+
 ## 2026-11-20: Horizon memory probe on the owner's Switch (3 launches, title takeover)
 
 - Address space: ASLR region 0x8000000 to 0x1000000000 (36 bits), so 4 GB windows 1 to 15.
