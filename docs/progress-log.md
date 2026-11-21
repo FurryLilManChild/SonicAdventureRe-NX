@@ -2,6 +2,24 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: Sonic's face fixed (on the PC copy): split shape keys
+
+- Cause found on the decomp's x86 build (gdb and logging in player_mouth_blend): in the talking
+  close-up, the mouth blends between shapes from sonic_mouth_shapes (21 keys of 222 points). Key 7
+  read as 222 points was far from shape 0 point by point (6.5 units, the head's whole size) but close
+  as a set: its array in the generated data held only 59 points. config/1st_read/data.txt splits
+  the key at 0x8c1fbec8 into vertices[59] and floats[489]. On the Dreamcast build the two lie
+  together (content.ld places every row at its address); the native link places each row on its
+  own, so the blend read 163 points from whatever followed. The scramble ramped in over 4 pictures
+  and out over 6, exactly the script's 0 to 7 (steps of 1/4) and 7 to 6 (1/6).
+- A scan of every NJS_MKEY_P list in all modules' generated data finds seven keys shorter than
+  their lists: Sonic's mouth keys 7, 9, 10, 12 and 13, and one key each in the lists at 0x8c396e4c
+  (239 points) and 0x8c3a2cec (201 points), another character's mouth or face. In each, the rows
+  that follow add up to exactly the missing points.
+- Patch 0008 merges each into one vertices[N] row (the bytes are the same, so the Dreamcast build
+  is unchanged). The PC copy, rebuilt, renders the scene's pictures 1586 to 1595 with the mouth
+  moving whole (face_fixed.png). The Switch build takes it in the next test.
+
 ## 2026-11-21: the port menu, and a second pause trace
 
 - Port menu (nx_menu.c, drawn by nx_overlay.c with a 5x7 font): Minus and + open it in place of
