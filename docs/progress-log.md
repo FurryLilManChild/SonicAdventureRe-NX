@@ -12,7 +12,7 @@ Newest first. One entry per session, with evidence.
 - Timing (stock clocks, headless, no rendering or pacing): 0 vsyncs at 4.1 s (setup, disc check,
   symbols), 211 at 6.1 s, done at 7.6 s.
 - Exit path: _exit on the end's own stack, heartbeat stopped, report, 12 domain maps undone ok,
-  waited for +, left; the owner reports it returned cleanly. Test 1's black screen was this end screen
+  waited for +, left (the log ends there; no crash log). Test 1's black screen was this end screen
   never reached, as the failure came before.
 
 ## 2026-11-20: Switch Test 1 on the owner's Switch, and Test 2's fixes
