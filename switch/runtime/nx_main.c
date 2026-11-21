@@ -170,18 +170,25 @@ static void __attribute__((noreturn, used)) nx_finish(int status)
     __real__exit(status);
 }
 
-// exit runs the C library's handlers (atexit, C++ destructors) before _exit: logged, so a hang
-// in them shows
-void __real_exit(int status) __attribute__((noreturn));
+// exit would run the C library's handlers (C++ destructors among them) before _exit. They tore
+// down the renderer and the sound under threads still running, and the console crashed after
+// "exit(0) called" on every quit through exit. The game registers no handler of its own (no
+// atexit in the decomp), so exit now stops the sound, flushes the files, and takes the same end
+// as _exit, which leaves cleanly
+void __wrap__exit(int status) __attribute__((noreturn));
+void nx_sound_stop(void);
 void __wrap_exit(int status) __attribute__((noreturn));
 void __wrap_exit(int status)
 {
-    fprintf(stderr, "nx: end: exit(%d) called; the C library's handlers run next (%.1f s)\n", status, seconds());
+    fprintf(stderr, "nx: end: exit(%d) called; the sound stops and the end goes on as _exit's (%.1f s)\n", status,
+            seconds());
     fflush(stderr);
-    __real_exit(status);
+    nx_sound_stop();
+    step("sound stopped");
+    fflush(NULL);
+    __wrap__exit(status);
 }
 
-void __wrap__exit(int status) __attribute__((noreturn));
 __asm__(".text\n"
         ".globl __wrap__exit\n"
         ".type __wrap__exit, %function\n"

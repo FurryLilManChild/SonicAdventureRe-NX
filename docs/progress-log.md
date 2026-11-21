@@ -2,6 +2,36 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: Pause menu shows, Start counted once, clean quit
+
+Findings from the owner's d902b62 logs, then reproduced on the decomp's x86 build (Emerald Coast,
+headless, Start held for 6 vsyncs by a local test hack in pads.c, not committed):
+
+- Re-pause: in each of the 20 or so pauses, Start resumed the game (stage_mode 15 to 14) and the
+  game paused again two scans later with no new Start from the window. Cause, stage_run_action and
+  stage_run_field: they sum a frame's presses starting from what per_info holds as the frame
+  begins, and write the sum back at its end. On the Dreamcast the pad server refills that record
+  at each vsync; a host's pads fill it only at a scan. So the sum began with the frame before's sum
+  (a press counted in two frames: Start ended the pause, then opened it again), and the last
+  step's scan was never added (a press there was lost). On the x86 build Start at vsync 700 (step 1)
+  never paused before the fix. Patch 0009, native only (NONMATCHING and not DREAMCAST): the sum
+  starts empty and takes the last step's scan. After it, Start at 700 and at 701 both pause, and
+  the next Start resumes play for good (x86: stage_mode 15 at 701 or 703, 14 at 823).
+- Invisible pause menu: the x86 build showed no menu either, so it is the decomp's renderer, not
+  the Switch. The trace had shown the draws reach the records (544 sprites, 6320 screen strips
+  while paused) and pictures kept reaching the screen. The menu's tiles and words are njDrawTexture
+  strips at 1/z of 9 and 10; the PowerVR takes any 1/z, but draw.vert set depth to 1/z with the
+  near plane at z = 1, so Vulkan's depth range cut everything nearer, the whole menu. Patch 0010:
+  depth is 1/z times 1/256 (a power of two, so every compare and the blend list's order stay
+  exact in D32_SFLOAT); world draws are still cut at z = 1, now by the clip distance (with
+  BATCH_NEAR's near clip as before). x86: the menu shows (banner, three choices, the tiled back and
+  its shadow); 48 gameplay pictures before the pause are pixel for pixel the same as before.
+- Quit crash: every quit through exit() ends the log at "exit(0) called; the C library's handlers
+  run next", including one from before the port menu (399.4 s); the game's own _exit path leaves
+  cleanly. The decomp registers no atexit handler, so __wrap_exit now stops the sound thread
+  (window_sound_close, new nx_sound_stop), flushes, and takes the _exit end (nx_finish).
+- The next build also carries the face fix (507b244) and the live Resolution setting (f6c7a7e).
+
 ## 2026-11-21: Resolution in the port menu, live
 
 - the owner (test d902b62): the port menu works and looks right; the menu's quit crashes instead of

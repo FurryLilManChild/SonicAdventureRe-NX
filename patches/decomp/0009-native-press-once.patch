@@ -1,0 +1,64 @@
+diff --git a/src/stage/stage.c b/src/stage/stage.c
+index aeb8b48..2cf3b9c 100644
+--- a/src/stage/stage.c
++++ b/src/stage/stage.c
+@@ -2557,8 +2557,18 @@ static int stage_run_action(void)
+     Uint32 press0;
+     Uint32 press1;
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    /* a host's pads fill per_info at each scan, where the console's server
++     * fills it at each vsync. the record here holds the sum the frame before
++     * wrote below, so a press would count in two frames, as the start that
++     * ends a pause then opens it again. the sum so starts empty, and takes
++     * the last step's scan below, which a console's next vsync would show */
++    press0 = 0;
++    press1 = 0;
++#else
+     press0 = per_info[0]->press;
+     press1 = per_info[1]->press;
++#endif
+     extra = 0;
+ #ifdef NONMATCHING
+     /* each frame starts with its limit uncleared, as the image loads
+@@ -2597,6 +2607,10 @@ static int stage_run_action(void)
+             press1 |= per_info[1]->press;
+         }
+     }
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    press0 |= per_info[0]->press;
++    press1 |= per_info[1]->press;
++#endif
+     per_info[0]->press = press0;
+     per_info[1]->press = press1;
+ #ifdef NONMATCHING
+@@ -2617,8 +2631,18 @@ static int stage_run_field(void)
+     Uint32 press0;
+     Uint32 press1;
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    /* a host's pads fill per_info at each scan, where the console's server
++     * fills it at each vsync. the record here holds the sum the frame before
++     * wrote below, so a press would count in two frames, as the start that
++     * ends a pause then opens it again. the sum so starts empty, and takes
++     * the last step's scan below, which a console's next vsync would show */
++    press0 = 0;
++    press1 = 0;
++#else
+     press0 = per_info[0]->press;
+     press1 = per_info[1]->press;
++#endif
+     extra = 0;
+     /* @hack spelling: 1850 through limit, which SHC keeps in FR15 for the
+      * loop (MOVA at 0x8c051bb8); compared as a constant, 77 of 84 words
+@@ -2642,6 +2666,10 @@ static int stage_run_field(void)
+             press1 |= per_info[1]->press;
+         }
+     }
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    press0 |= per_info[0]->press;
++    press1 |= per_info[1]->press;
++#endif
+     per_info[0]->press = press0;
+     per_info[1]->press = press1;
+ #ifdef NONMATCHING

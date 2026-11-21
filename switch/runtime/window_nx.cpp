@@ -493,3 +493,11 @@ void window_sound_close(Window *window)
 }
 
 } // namespace pc
+
+// the end's own exit (nx_main.c) stops the sound before it leaves: the feed thread then no longer
+// waits on audout when the services close
+extern "C" void nx_sound_stop(void)
+{
+    if (pc::the_window != nullptr)
+        pc::window_sound_close(pc::the_window);
+}
