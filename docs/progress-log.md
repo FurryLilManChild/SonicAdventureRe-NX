@@ -2,6 +2,32 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: English layer, part 1: cutscene voices and subtitles
+
+- the owner (test 3f2a27b): the pause menu shows, resume stays resumed, quitting returns to the home
+  menu, the face is fixed, and Resolution works. All five fixes confirmed.
+- Patch 0011 (native only, NONMATCHING and not DREAMCAST): three hooks. native_hook_voice_file in
+  engine/sa1/sound.c's ADXT_StartAfs may give a voice's bytes in the archive's place;
+  native_hook_event_text in event_message_show (src/event/play.c) may give the subtitle to show,
+  and NULL from event_message_close; native_hook_event_text_next, polled in event_wait's loop,
+  shows a later part of a line the US release split in two. Defaults in bare.c do nothing.
+- switch/runtime/nx_english.c answers them from sdmc:/switch/SonicAdventureRe-nx/english/, and
+  wraps loader_read_prs to know the cutscene (ev%04x.prs): 148 Japanese lines read differently in
+  English from one cutscene to another, so subtitles are keyed by cutscene and CRC-32 of the
+  Japanese bytes, with the CRC alone as the fallback. A split line's next part shows after its
+  share (by letters) of the English clip, else 3 s a part. Host test on the converter's output:
+  ev0006's split line shows its second part 3.3 s in, clip 954 is 62,838 bytes.
+- tools/english: common.py (PRS, AFS, the US cutscenes' five-language tables; its PRS matches
+  SA-nx's on all 236 US cutscene modules), make_maps.py (developer side) writes subtitle_map.txt
+  (1,054 subtitles: cutscene, CRC, US table, first slot, slot count) and voice_map.txt (1,869
+  clips), numbers only. make_english.py (player side, Python's standard library only) makes the
+  english folder from a US disc's files: EVENT_ADX_US.AFS copied, voice_map.txt, subtitles.txt.
+- Settings "voices" and "text" (english or japanese, English by default), and VOICES and TEXT in
+  the port menu, both live. The menu panel grew to 344 pixels for the two lines.
+- Not covered yet: 83 Japanese subtitles in cutscenes whose line counts don't match the US, the
+  219 clips the US cut or rewrote (they stay Japanese), and everything outside cutscenes (menus,
+  HUD, in-game voice banks, town messages, hints): the next build.
+
 ## 2026-11-21: Pause menu shows, Start counted once, clean quit
 
 Findings from the owner's d902b62 logs, then reproduced on the decomp's x86 build (Emerald Coast,

@@ -1,0 +1,153 @@
+--- a/src/event/play.c
++++ b/src/event/play.c
+@@ -542,6 +542,12 @@
+     return events_played[number];
+ }
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* a host's hook may show each subtitle in another language, and a line that
++ * language split in parts part by part, as event_wait polls for the next */
++static void event_message_put(const char *text);
++#endif
++
+ void event_wait(int steps)
+ {
+     /* @hack type: the thread's bytes through a void *, which keeps them in
+@@ -559,6 +565,15 @@
+             i = skip_wait(i);
+         }
+ #endif
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++        if (!event_skipping) {
++            const char *next = native_hook_event_text_next();
++
++            if (next != NULL) {
++                event_message_put(next);
++            }
++        }
++#endif
+         bitmap_draw(&thread->window);
+         thread_yield();
+         /* @hack redundant: an empty test of dat_8c751dfe, which nothing comes
+@@ -570,8 +585,17 @@
+     }
+ }
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
+ void event_message_show(const char *text)
+ {
++    event_message_put(native_hook_event_text(text));
++}
++
++static void event_message_put(const char *text)
++#else
++void event_message_show(const char *text)
++#endif
++{
+     struct event_thread *thread = thread_get_data(NULL);
+     struct bitmap *window = &thread->window;
+ 
+@@ -642,6 +666,10 @@
+     struct event_thread *thread = thread_get_data(NULL);
+     struct bitmap *window = &thread->window;
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    native_hook_event_text(NULL);
++#endif
++
+ #ifdef NONMATCHING
+     /* a skip clears the window as a fade out would, at once, and releases
+      * it */
+--- a/engine/sa1/sound.c
++++ b/engine/sa1/sound.c
+@@ -645,8 +645,28 @@
+ void ADXT_StartAfs(ADXT adxt, Sint32 patid, Sint32 fid)
+ {
+     size_t size = 0;
++    const void *data = NULL;
+ 
+     (void)patid;
++    /* a hook may give the file in the archive's place, as another language's
++     * voice */
++    if (adxt && native_hook_voice_file(afs_name, fid, &data, &size) && data &&
++        size) {
++        if (size > bytes_room) {
++            uint8_t *more = realloc(bytes, size);
++
++            if (!more) {
++                ADXT_Stop(adxt);
++                return;
++            }
++            bytes = more;
++            bytes_room = size;
++        }
++        memcpy(bytes, data, size);
++        start((struct talk *)adxt, size, 0);
++        return;
++    }
++    size = 0;
+     if (adxt && fid >= 0 && fid < afs_count) {
+         size = read_bytes(afs_name, afs_offset[fid], afs_size[fid]);
+     }
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -119,6 +119,26 @@
+     (void)voice;
+ }
+ 
++const char *native_hook_event_text(const char *text)
++{
++    return text;
++}
++
++const char *native_hook_event_text_next(void)
++{
++    return NULL;
++}
++
++int native_hook_voice_file(const char *archive, int fid, const void **data,
++                           size_t *size)
++{
++    (void)archive;
++    (void)fid;
++    (void)data;
++    (void)size;
++    return 0;
++}
++
+ /* the hooks round the loads and the sound calls. marks.py renames the game's
+  * own definition of each with the prefix native_real_ */
+ int native_real_loader_read_prs(char *name, void *dest);
+--- a/engine/native/prelude.h
++++ b/engine/native/prelude.h
+@@ -83,5 +83,12 @@
+ void native_hook_texture_load(const char *name);
+ void native_hook_music_request(int music);
+ void native_hook_voice_request(int voice);
++/* a cutscene's subtitle as the game shows it: native_hook_event_text gives the
++ * text to show in its place (the same text where it has none). given NULL, the
++ * window closes. native_hook_event_text_next gives a later part of the last
++ * subtitle, once its time comes, else NULL. native_hook_voice_file may give a
++ * cutscene voice's file in place of the archive's: 1 with its bytes */
++const char *native_hook_event_text(const char *text);
++const char *native_hook_event_text_next(void);
+ 
+ #endif
+--- a/engine/native/native.h
++++ b/engine/native/native.h
+@@ -251,6 +251,15 @@
+ void native_hook_texture_load(const char *name);
+ void native_hook_music_request(int music);
+ void native_hook_voice_request(int voice);
++/* a cutscene's subtitle as the game shows it: native_hook_event_text gives the
++ * text to show in its place (the same text where it has none). given NULL, the
++ * window closes. native_hook_event_text_next gives a later part of the last
++ * subtitle, once its time comes, else NULL. native_hook_voice_file may give a
++ * cutscene voice's file in place of the archive's: 1 with its bytes */
++const char *native_hook_event_text(const char *text);
++const char *native_hook_event_text_next(void);
++int native_hook_voice_file(const char *archive, int fid, const void **data,
++                           size_t *size);
+ 
+ /* XMTRX: XF0 to XF15, as sa_ftrv takes them */
+ float *native_xmtrx(void);

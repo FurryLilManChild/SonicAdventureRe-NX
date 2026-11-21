@@ -25,6 +25,10 @@ extern int port_chosen[3];
 extern int nx_overlay_on;
 extern int nx_capture_enabled;
 extern int nx_capture_wide;
+// the English layer (nx_english.c)
+extern int nx_voices_english, nx_text_english;
+int nx_english_has_voices(void);
+int nx_english_has_text(void);
 
 volatile int nx_menu_open;     // read by the sound thread: quiet while 1
 volatile int nx_menu_request;  // set by the window on Minus and +
@@ -45,7 +49,7 @@ static const char *scale_name(int halves)
     return halves == 3 ? "1.5X" : halves == 4 ? "2X" : "1X";
 }
 
-enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
+enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_VOICES, ITEM_TEXT, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
 
 static int cursor;
 static int quit_armed;
@@ -86,13 +90,18 @@ static void save_settings(void)
             "capture %d\n"
             "# the port's own: sound volume in percent, the frame counter 1 on 0 off\n"
             "volume %d\n"
-            "counter %d\n",
+            "counter %d\n"
+            "# the English layer (english/, made from a US disc): english or japanese, each\n"
+            "voices %s\n"
+            "text %s\n",
             disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", 1,
-            nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_settings_capture, nx_volume, nx_overlay_on);
+            nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_settings_capture, nx_volume, nx_overlay_on,
+            nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese");
     fclose(f);
-    fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %s, capture %d, volume %d, counter %d\n",
+    fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %s, capture %d, volume %d, counter %d, "
+                    "voices %s, text %s\n",
             port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", scale_name(nx_halves), nx_settings_capture,
-            nx_volume, nx_overlay_on);
+            nx_volume, nx_overlay_on, nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese");
 }
 
 // the menu's lines as text, for the overlay (nx_overlay.c)
@@ -107,6 +116,8 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
     snprintf(lines[n++], 40, "WIDESCREEN      %s", port_toggles[1] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "60 FPS          %s", port_toggles[2] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "RESOLUTION      %s", scale_name(nx_halves));
+    snprintf(lines[n++], 40, "VOICES          %s", nx_voices_english ? "ENGLISH" : "JAPANESE");
+    snprintf(lines[n++], 40, "TEXT            %s", nx_text_english ? "ENGLISH" : "JAPANESE");
     snprintf(lines[n++], 40, "VOLUME          %d%%", nx_volume);
     snprintf(lines[n++], 40, "FPS COUNTER     %s", nx_overlay_on ? "ON" : "OFF");
     snprintf(lines[n++], 40, "CAPTURES        %s", nx_settings_capture ? "ON" : "OFF");
@@ -123,6 +134,10 @@ const char *nx_menu_hint(void)
         return "2X MAY NOT HOLD 60 FPS";
     case ITEM_CAPTURE:
         return "NEXT START. ON COSTS SPEED";
+    case ITEM_VOICES:
+        return nx_english_has_voices() ? "CUTSCENE VOICES" : "NO ENGLISH FILES ON SD";
+    case ITEM_TEXT:
+        return nx_english_has_text() ? "CUTSCENE SUBTITLES" : "NO ENGLISH FILES ON SD";
     default:
         return "B OR + RESUMES";
     }
@@ -143,6 +158,12 @@ static void change(int step)
     case ITEM_SIZE:
         // 1X, 1.5X, 2X, round
         nx_halves = 2 + (nx_halves - 2 + (step < 0 ? 2 : 1)) % 3;
+        break;
+    case ITEM_VOICES:
+        nx_voices_english = !nx_voices_english;
+        break;
+    case ITEM_TEXT:
+        nx_text_english = !nx_text_english;
         break;
     case ITEM_VOLUME:
         nx_volume += step < 0 ? -10 : 10;
