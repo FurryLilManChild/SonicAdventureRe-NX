@@ -2,6 +2,18 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-22: Disc images on the Switch
+
+- switch/loader/disc_extract.c: the loader unpacks a .gdi or a Redump .cue (raw 2352 or 2048
+  sectors) found in disc/ or us_disc/, once (extracted.txt last): the ISO9660 filesystem of the
+  first data track at LBA 45000 or later, absolute or track-relative LBAs. Redump cues: each FILE
+  at the running LBA, from 45000 after "REM HIGH-DENSITY AREA". Tested on the owner's PC (gcc in the
+  bridge's shell) against his own images: the Japanese Redump cue gives 2,106 files (967 MB, 23 s),
+  the US GDI 2,832 files (972 MB, 11 s), every file the same as the earlier extractions (the old
+  Japanese one had named ten PDATA files with a trailing dot).
+- The loader unpacks disc/ (stops if that fails) and us_disc/ (Japanese only if that fails), then
+  makes english/, then builds the image. README and the folder notes now ask for disc images.
+
 ## 2026-11-22: First-run builder (no game data in the release)
 
 - The released image must hold no disc data, so the Switch rebuilds it from the tester's

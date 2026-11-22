@@ -30,17 +30,16 @@ mv "$R/SonicAdventureRe-nx.fill.left.txt" out/release/ 2>/dev/null || true
 python3 switch/tools/audit.py "$R/SonicAdventureRe-nx.img" decomp "$B/SonicAdventureRe-nx.full.elf"
 cp "$B/SonicAdventureRe-nx.nro" "$R/"
 aarch64-linux-gnu-objcopy --remove-relocations='*' "$B/SonicAdventureRe-nx.elf" "$R/SonicAdventureRe-nx.elf"
-cat > "$R/disc/PUT_JAPANESE_DISC_FILES_HERE.txt" <<'EOF'
-Copy every file of your Japanese Sonic Adventure disc (HDR-0001, version 1.007) into this folder:
-1ST_READ.BIN beside this note, and the SONICADV folder with all its files.
-The first launch builds the game from them (a few minutes) and saves it as
-SonicAdventureRe-nx.built.img; later launches start straight away.
-EOF
-cat > "$R/us_disc/PUT_US_DISC_FILES_HERE.txt" <<'EOF'
-Optional, for English voices and text: copy every file of your US Sonic Adventure disc into this
-folder (its SONICADV folder with all its files). The first launch makes the english folder from
-them. Choose VOICES and TEXT in the port menu (+ and - together).
-EOF
+cat > "$R/disc/PUT_JAPANESE_DISC_HERE.txt" <<'NOTE'
+Put your Japanese Sonic Adventure disc image (HDR-0001, version 1.007) in this folder:
+a .gdi with its track files, or a .cue with its .bin files.
+The first launch unpacks it here and builds the game from it (a few minutes, once).
+NOTE
+cat > "$R/us_disc/PUT_US_DISC_HERE.txt" <<'NOTE'
+Optional, for English voices and text: put your US Sonic Adventure disc image in this folder
+(a .gdi with its track files, or a .cue with its .bin files). The first launch unpacks it and
+makes the english folder. Choose VOICES and TEXT in the port menu (+ and - together).
+NOTE
 cp switch/release/README.txt "$R/README.txt" 2>/dev/null || true
 # nothing from the disc may be left: the image's header must say "to be filled"
 python3 - "$R/SonicAdventureRe-nx.img" <<'EOF'

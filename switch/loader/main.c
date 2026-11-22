@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <switch.h>
 
+#include "disc_extract.h"
 #include "english_build.h"
 
 #define DIR "sdmc:/switch/SonicAdventureRe-nx"
@@ -456,6 +457,13 @@ int main(int argc, char **argv)
         if (b)
             fclose(b);
     }
+    // the discs' images (.gdi or .cue), unpacked once where the player put them
+    if (disc_extract(DIR "/disc", "Japanese", say)) {
+        say("the Japanese disc image could not be unpacked\n");
+        goto fail;
+    }
+    if (disc_extract(DIR "/us_disc", "US", say))
+        say("the US disc image could not be unpacked: the game starts in Japanese\n");
     // the English layer, made once from the US disc's files where the player put them
     {
         struct stat st;

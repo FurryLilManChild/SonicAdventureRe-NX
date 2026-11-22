@@ -102,9 +102,10 @@ clang $CF -fPIE -c switch/loader/main.c -o "$B/loader.o"
 # the English builder (english_build.c) with its maps, made from tools/english/*_map.txt
 python3 switch/tools/maps2c.py tools/english "$B/english_maps.c"
 clang $CF -fPIE -c switch/loader/english_build.c -o "$B/english_build.o"
+clang $CF -fPIE -c switch/loader/disc_extract.c -o "$B/disc_extract.o"
 clang $CF -fPIE -c "$B/english_maps.c" -o "$B/english_maps.o"
 aarch64-linux-gnu-ld -T switch/ld/switch.ld -pie --no-dynamic-linker --gc-sections -z text -z now --build-id=sha1 \
-    --wrap=envSetup "$GCC/crti.o" "$GCC/crtbegin.o" "$B/loader.o" "$B/english_build.o" "$B/english_maps.o" -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" \
+    --wrap=envSetup "$GCC/crti.o" "$GCC/crtbegin.o" "$B/loader.o" "$B/disc_extract.o" "$B/english_build.o" "$B/english_maps.o" -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" \
     -L"$GCC" --start-group -lnx -lc -lm -lgcc -lsysbase --end-group "$GCC/crtend.o" "$GCC/crtn.o" -o "$B/loader.elf"
 "$TOOLS/nacptool" --create "SonicAdventureRe-nx" "FurryLilManChild" "0.0.1-$commit" "$B/loader.nacp"
 # the icon is the owner's image, kept out of git (assets/ is ignored); a copy lies in his
