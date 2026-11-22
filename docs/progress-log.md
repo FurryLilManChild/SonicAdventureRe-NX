@@ -13,6 +13,14 @@ Newest first. One entry per session, with evidence.
   with the English layer's coverage (done and not done). make_release.sh also zips
   SonicAdventureRe-nx-0.5.0-switch.zip (switch/SonicAdventureRe-nx/: .nro, .img, .fill, .elf,
   README.txt, COPYING.txt, disc/ and us_disc/ notes) and keeps the full and loader ELFs.
+- Packaged (release build d94c0b9; strip a637561 skips the port's own objects, after the first
+  run stopped on default_settings, which had grown and so had no stub twin): 254 disc files,
+  329,422 pieces, fill table 5,287,032 bytes; audit 64 windows (file names and labels in the
+  decomp's source); fill_check identical. SonicAdventureRe-nx-0.5.0-switch.zip 15,446,187 bytes,
+  sha256 1c2d93b98ed843dd096b21359102fb68399c5d94e6f7680ccef70546b4e63ad3; NRO sha256
+  222461b56363738085c837e5e5c39a346185da2ffd976156885664cbc3924f85. In the owner's out\release\ with
+  release_notes_0.5.0.md. Not booted on a Switch as built: differs from the tested e62c854 only by
+  the version strings, no --times, and the first-run settings text.
 
 ## 2026-11-22: TRANSLUCENCY in the port menu
 
