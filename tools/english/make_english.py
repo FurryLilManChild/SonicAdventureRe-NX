@@ -13,6 +13,8 @@ sdmc:/switch/SonicAdventureRe-nx/english/. It writes:
   subtitles.txt     each mapped cutscene subtitle in English: the cutscene, the CRC-32 of the
                     Japanese line, then the English parts, tab-separated, with \\n, \\t, \\a and \\\\
                     escaped
+  hints.txt         each mapped stage hint page in English, as subtitles.txt: the module, the
+                    CRC-32 of the Japanese page, then the English parts
   files.txt         the Japanese files below, one a line, the game reads from this folder in place
                     of the disc's: text (textures and messages) or voices (sound banks)
   SONICADV/         those files, under the disc's names (the renderer reads this folder's textures
@@ -97,8 +99,36 @@ def main():
     with open(os.path.join(out, 'subtitles.txt'), 'w', encoding='ascii') as f:
         f.writelines(lines)
     print(f'subtitles: {written} written', f'({len(missing)} cutscenes not found)' if missing else '')
+    hints(disc, out)
     files(disc, jp_disc, out)
     return 0
+
+
+def hints(disc, out):
+    """the stages' hint pages in English, from the US stage modules (STG01.PRS ...)"""
+    modules, rows, missing = {}, [], set()
+    lines = ['# SonicAdventureRe-nx English stage hints, made by tools/english/make_english.py\n']
+    for row in open(os.path.join(here, 'hint_map.txt')):
+        if row.startswith('#') or not row.strip():
+            continue
+        mod, crc, b, r, p = row.split()
+        if mod not in modules:
+            path = find(disc, mod.upper() + '.PRS')
+            modules[mod] = common.hint_blocks(common.prs_decompress(open(path, 'rb').read())) if path else None
+            if not path:
+                missing.add(mod)
+        blocks = modules[mod]
+        if not blocks:
+            continue
+        try:
+            parts = common.hint_english(blocks, int(b), int(r), int(p))
+        except IndexError:
+            parts = None
+        if parts:
+            lines.append('\t'.join([mod, crc] + [escape(x) for x in parts]) + '\n')
+    with open(os.path.join(out, 'hints.txt'), 'w', encoding='ascii') as f:
+        f.writelines(lines)
+    print(f'hints: {len(lines) - 1} written', f'({len(missing)} modules not found)' if missing else '')
 
 
 def voice_numbers():

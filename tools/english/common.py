@@ -269,3 +269,78 @@ def messages_rebased(us, jp_base, voice_of):
         if inside(w):
             struct.pack_into('<I', d, k, w + delta)
     return bytes(d), changed
+
+
+# --- stage hints (Tikal's orbs, and the areas' hint pages): in each US stage module, page arrays
+# (text, steps) ending (0, 0); a block of Japanese ones back to back, then the English ones
+
+MODULE_BASE = 0x0c900000  # where a stage or area module loads
+
+
+def hint_runs(d):
+    """the module's page arrays in order: (offset, [page text, ...])"""
+    inside = lambda p: MODULE_BASE <= p < MODULE_BASE + len(d)
+
+    def text(p):
+        o = p - MODULE_BASE
+        e = d.find(b'\0', o)
+        return d[o:e] if e > o else None
+
+    found, i = [], 0
+    while i + 8 <= len(d):
+        pages, k = [], i
+        while k + 8 <= len(d):
+            p, v = struct.unpack_from('<II', d, k)
+            if not inside(p) or v > 0xffff:
+                break
+            t = text(p)
+            if not t or len(t) < 3 or (t[0] not in (7, 9, 0x81, 0x82, 0x83) and not t[:1].isalpha()):
+                break
+            pages.append(t)
+            k += 8
+        if pages and k + 8 <= len(d) and struct.unpack_from('<II', d, k) == (0, 0):
+            found.append((i, pages))
+            i = k + 8
+        else:
+            i += 4
+    return found
+
+
+def is_japanese(t):
+    return len(t) > 4 and t[0] in (7, 9) and sum(1 for b in t if b >= 0x81) > len(t) // 3
+
+
+def hint_blocks(d):
+    """[(Japanese runs, English runs)]: Japanese page arrays back to back, then as many more back
+    to back in no Japanese (the US release's next language, English)"""
+    rs = hint_runs(d)
+    end = lambda r: r[0] + 8 * (len(r[1]) + 1)
+    out, i = [], 0
+    while i < len(rs):
+        if not all(is_japanese(t) for t in rs[i][1]):
+            i += 1
+            continue
+        j = i + 1
+        while j < len(rs) and rs[j][0] == end(rs[j - 1]) and all(is_japanese(t) for t in rs[j][1]):
+            j += 1
+        n = j - i
+        e = rs[j:j + n]
+        if (len(e) == n and e[0][0] == end(rs[j - 1]) and all(e[k][0] == end(e[k - 1]) for k in range(1, n))
+                and not any(is_japanese(t) for r in e for t in r[1])):
+            out.append((rs[i:j], e))
+        i = j
+    return out
+
+
+def hint_english(blocks, b, r, p):
+    """the English parts for page p of run r of block b: the same page where the two runs have as
+    many pages, all of a one-page run's English, else page p (the last page takes the rest)"""
+    J, E = blocks[b]
+    jr, er = J[r][1], E[r][1]
+    if len(jr) == len(er):
+        return [er[p]]
+    if len(jr) == 1:
+        return list(er)
+    if len(er) > len(jr):
+        return [er[p]] if p < len(jr) - 1 else list(er[p:])
+    return None

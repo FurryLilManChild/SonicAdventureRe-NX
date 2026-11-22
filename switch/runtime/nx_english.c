@@ -165,13 +165,16 @@ static void load_voices(void)
             have_voices ? "ready" : "NOT FOUND (english/EVENT_ADX_US.AFS and voice_map.txt)", mapped, clips);
 }
 
-static void load_text(void)
+// the stage hints (hints.txt): the same rows, the module in place of the cutscene
+static struct line *hints;
+static int hint_count;
+
+// subtitles.txt or hints.txt: each row a name (evNNNN, or a module), a CRC and the English parts
+static int load_rows(const char *path, struct line **out)
 {
-    FILE *f = fopen(ENGLISH "/subtitles.txt", "rb");
-    if (!f) {
-        fprintf(stderr, "english: subtitles: NOT FOUND (english/subtitles.txt)\n");
-        return;
-    }
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return -1;
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -179,16 +182,16 @@ static void load_text(void)
     if (!text || fread(text, 1, (size_t)size, f) != (size_t)size) {
         fclose(f);
         free(text);
-        return;
+        return -1;
     }
     fclose(f);
     text[size] = 0;
-    int rows = 0;
+    int rows = 0, count = 0;
     for (long i = 0; i < size; i++)
         rows += text[i] == '\n';
-    lines = calloc((size_t)rows + 1, sizeof *lines);
-    if (!lines)
-        return;
+    struct line *made = calloc((size_t)rows + 1, sizeof *made);
+    if (!made)
+        return -1;
     // each row: evNNNN \t crc \t part \t part ... (kept in text, which stays allocated)
     for (char *row = text, *next; row && *row; row = next) {
         next = strchr(row, '\n');
@@ -197,7 +200,7 @@ static void load_text(void)
         size_t n = strlen(row);
         if (n && row[n - 1] == '\r')
             row[n - 1] = 0;
-        if (row[0] == '#' || strncmp(row, "ev", 2))
+        if (row[0] == '#' || !row[0])
             continue;
         struct line l = {0};
         char *field = row, *tab;
@@ -207,7 +210,7 @@ static void load_text(void)
             if (tab)
                 *tab++ = 0;
             if (k == 0)
-                l.event = (int32_t)strtol(field + 2, NULL, 16);
+                l.event = strncmp(field, "ev", 2) ? -1 : (int32_t)strtol(field + 2, NULL, 16);
             else if (k == 1)
                 l.key = (uint32_t)strtoul(field, NULL, 16);
             else if (l.parts < MOST_PARTS)
@@ -216,11 +219,27 @@ static void load_text(void)
             field = tab;
         }
         if (l.parts)
-            lines[line_count++] = l;
+            made[count++] = l;
     }
-    qsort(lines, (size_t)line_count, sizeof *lines, by_key);
+    qsort(made, (size_t)count, sizeof *made, by_key);
+    *out = made;
+    return count;
+}
+
+static void load_text(void)
+{
+    line_count = load_rows(ENGLISH "/subtitles.txt", &lines);
+    if (line_count < 0) {
+        line_count = 0;
+        fprintf(stderr, "english: subtitles: NOT FOUND (english/subtitles.txt)\n");
+    } else {
+        fprintf(stderr, "english: subtitles: %d lines\n", line_count);
+    }
     have_text = line_count > 0;
-    fprintf(stderr, "english: subtitles: %d lines\n", line_count);
+    hint_count = load_rows(ENGLISH "/hints.txt", &hints);
+    if (hint_count < 0)
+        hint_count = 0;
+    fprintf(stderr, "english: hints: %d pages\n", hint_count);
 }
 
 static void load_files(void)
@@ -439,4 +458,23 @@ const char *__wrap_native_hook_event_text_next(void)
     if (pending_next >= pending->parts)
         pending = NULL;
     return next;
+}
+
+// a hint or field message page (patch 0015): its English parts, by the CRC of the Japanese page.
+// A field's messages come from the english folder already, in English, and find nothing here
+int __wrap_native_hook_hint_parts(const char *text, const char **parts, int most)
+{
+    parts[0] = text;
+    if (!text || !nx_text_english || most < 1)
+        return 1;
+    load();
+    uint32_t crc = crc32_of((const uint8_t *)text, strlen(text));
+    for (int i = 0; i < hint_count; i++)
+        if (hints[i].key == crc) {
+            int n = hints[i].parts < most ? hints[i].parts : most;
+            for (int k = 0; k < n; k++)
+                parts[k] = hints[i].part[k];
+            return n;
+        }
+    return 1;
 }

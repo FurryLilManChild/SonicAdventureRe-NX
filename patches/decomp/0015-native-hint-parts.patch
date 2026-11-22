@@ -1,0 +1,75 @@
+--- a/src/event/script.c
++++ b/src/event/script.c
+@@ -603,12 +603,31 @@
+     message_holding = TRUE;
+     pause_disable();
+     while ((text = pages->text) != NULL && !message_cut_short) {
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++        /* a host's hook may give the page in another language, in parts
++         * where that language split it: each shows its share of the steps,
++         * or until a button */
++        const char *parts[4];
++        int count = native_hook_hint_parts(text, parts, 4);
++        int k;
++
++        for (k = 0; k < count && !message_cut_short; k++) {
++            message_show(&message_window, (char *)parts[k]);
++            if (pages->steps) {
++                WAIT_STEPS(&message_window, pages->steps * (k + 1) / count -
++                                                pages->steps * k / count);
++            } else {
++                message_wait_button(&message_window);
++            }
++        }
++#else
+         message_show(&message_window, text);
+         if (pages->steps) {
+             WAIT_STEPS(&message_window, pages->steps);
+         } else {
+             message_wait_button(&message_window);
+         }
++#endif
+         pages++;
+     }
+     message_finish(&message_window);
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -129,6 +129,13 @@
+     return NULL;
+ }
+ 
++int native_hook_hint_parts(const char *text, const char **parts, int most)
++{
++    (void)most;
++    parts[0] = text;
++    return 1;
++}
++
+ int native_hook_disc_file(const char *name, char *out, size_t size)
+ {
+     (void)name;
+--- a/engine/native/prelude.h
++++ b/engine/native/prelude.h
+@@ -90,5 +90,9 @@
+  * cutscene voice's file in place of the archive's: 1 with its bytes */
+ const char *native_hook_event_text(const char *text);
+ const char *native_hook_event_text_next(void);
++/* a hint or field message page as the game shows it: native_hook_hint_parts
++ * gives the parts to show in its place, one after the other, at most most of
++ * them, and how many (1 with the page itself where it has none) */
++int native_hook_hint_parts(const char *text, const char **parts, int most);
+ 
+ #endif
+--- a/engine/native/native.h
++++ b/engine/native/native.h
+@@ -258,6 +258,10 @@
+  * cutscene voice's file in place of the archive's: 1 with its bytes */
+ const char *native_hook_event_text(const char *text);
+ const char *native_hook_event_text_next(void);
++/* a hint or field message page as the game shows it: native_hook_hint_parts
++ * gives the parts to show in its place, one after the other, at most most of
++ * them, and how many (1 with the page itself where it has none) */
++int native_hook_hint_parts(const char *text, const char **parts, int most);
+ int native_hook_voice_file(const char *archive, int fid, const void **data,
+                            size_t *size);
+ /* a disc file the game opens by name: native_hook_disc_file may give a host

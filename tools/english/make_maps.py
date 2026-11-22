@@ -2,7 +2,7 @@
 """SonicAdventureRe-nx: write the English layer's maps, which the repository ships (numbers only,
 no game text or sound). Run by the port's developers, not the players.
 
-  make_maps.py GEN_EVENTS_DIR US_EVENTS_DIR VOICE_MAP.json OUT_DIR
+  make_maps.py GEN_EVENTS_DIR US_EVENTS_DIR VOICE_MAP.json OUT_DIR [GEN_MODULES_DIR US_MODULES_DIR]
 
 GEN_EVENTS_DIR is the decomp's build/gen/events (the Japanese release's subtitles), US_EVENTS_DIR
 the US disc's cutscene modules decompressed (EV0001.bin, ...), VOICE_MAP.json event_voices.py's
@@ -11,6 +11,9 @@ output. It writes:
   subtitle_map.txt  event, CRC-32 of the Japanese subtitle's bytes (as the game passes them),
                     the US module's language table, first slot and slot count
   voice_map.txt     a Japanese EVENT_ADX.AFS index and its EVENT_ADX_US.AFS index
+  hint_map.txt      a stage's hint page: module, CRC-32 of the Japanese page, and where its US
+                    Japanese page sits (block, run, page; common.hint_blocks); with the modules
+                    (the decomp's build/gen/modules, and the US disc's stage modules decompressed)
 """
 import json
 import os
@@ -50,6 +53,45 @@ def main():
         for jp_index, us_index in sorted((int(k), v) for k, v in voices.items()):
             f.write(f'{jp_index} {us_index}\n')
     print(f'{len(lines)} subtitles mapped ({aligned} of {total} aligned), {len(voices)} voices')
+    if len(sys.argv) > 6:
+        hints(sys.argv[5], sys.argv[6], out)
+
+
+def hints(gen_modules, us_modules, out):
+    """each Japanese hint page to the US module's same page, matched by its words (the two
+    releases' Japanese agree, or nearly)"""
+    import difflib
+    import re
+    from event_text import c_string
+
+    def texts(inc):
+        src = open(inc, encoding='latin-1').read()
+        found = {}
+        for m in re.finditer(r'#define TEXT_(\d+) ((?:"(?:[^"\\]|\\.)*"\s*\\?\s*)+)', src):
+            found[int(m.group(1))] = b''.join(c_string(x) for x in re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(2)))
+        return found
+
+    bare = lambda t: bytes(b for b in t if b not in (7, 9, 10))
+    rows, total = [], 0
+    for mod in sorted(os.listdir(gen_modules)):
+        inc = os.path.join(gen_modules, mod, 'scripts', 'text.inc')
+        us = os.path.join(us_modules, mod.upper() + '.bin')
+        if not os.path.exists(inc) or not os.path.exists(us):
+            continue
+        blocks = common.hint_blocks(open(us, 'rb').read())
+        pages = [(b, r, p, t) for b, (J, _) in enumerate(blocks) for r, run in enumerate(J) for p, t in enumerate(run[1])]
+        for t in texts(inc).values():
+            if not common.is_japanese(t):
+                continue
+            total += 1
+            best = max(pages, key=lambda c: difflib.SequenceMatcher(None, bare(t), bare(c[3])).ratio(), default=None)
+            if best and difflib.SequenceMatcher(None, bare(t), bare(best[3])).ratio() >= 0.6 \
+                    and common.hint_english(blocks, *best[:3]):
+                rows.append(f'{mod} {zlib.crc32(t):08x} {best[0]} {best[1]} {best[2]}\n')
+    with open(os.path.join(out, 'hint_map.txt'), 'w') as f:
+        f.write('# SonicAdventureRe-nx: module, CRC-32 of the Japanese hint page, US block, run, page\n')
+        f.writelines(rows)
+    print(f'{len(rows)} of {total} hint pages mapped')
 
 
 if __name__ == '__main__':

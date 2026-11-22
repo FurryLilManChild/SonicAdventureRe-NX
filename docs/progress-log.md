@@ -2,6 +2,23 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-22: Tikal's hints in English
+
+- The stages' hint pages are compiled into each stage module (modules/stgNN/scripts.c, the
+  Japanese text in build/gen/modules/*/scripts/text.inc). The US stage modules (load base
+  0x0c900000) hold the same page arrays per language, back to back: Japanese, then English,
+  French, Spanish, German (Emerald Coast: runs at 68696 to 68752 Japanese, 68768 on English).
+  common.hint_blocks finds the Japanese block and the English one after it; a Japanese page is
+  matched to the US Japanese page by its words (118 of 121 identical). make_maps.py writes
+  hint_map.txt (module, CRC of the Japanese page, block, run, page: numbers only): 121 of 277
+  pages mapped, in 12 modules (adv02, stg01 to stg10); the rest are mostly the developers' test
+  pages the US dropped. stg12 (Hot Shelter): the hint block isn't found yet. make_english.py
+  writes english/hints.txt from the US disc's STGnn.PRS.
+- Patch 0015: run_pages (src/event/script.c) asks native_hook_hint_parts for each page's parts,
+  and shows them one after the other, each with its share of the page's steps. nx_english.c
+  answers from hints.txt by the CRC of the Japanese page. Host test: Emerald Coast's panel hint
+  gives "Jump on panel No. 1. / It will take you to panels 2 and 3."
+
 ## 2026-11-22: In-game voice banks in English
 
 - The sound units line up after all: listing each unit's banks (V_AMY, V_SONICTAILS, ALIFE_SONIC)
