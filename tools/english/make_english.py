@@ -15,6 +15,8 @@ sdmc:/switch/SonicAdventureRe-nx/english/. It writes:
                     escaped
   files.txt         the Japanese files below, one a line, the game reads from this folder in place
                     of the disc's: text (textures and messages) or voices (sound banks)
+  SONICADV/         those files, under the disc's names (the renderer reads this folder's textures
+                    ahead of the disc's, as it reads the disc's SONICADV folder)
   NAME.PRS/.PVR     a texture file under its Japanese name: each texture whose size matches the
                     US one in the same place is the US one (the Japanese texture's identity stays)
   NAME.BIN          a field's messages (MR_MES, SS_MES, PAST_MES): the US file moved to the
@@ -112,6 +114,7 @@ def voice_numbers():
 def files(disc, jp_disc, out):
     """the US disc's English files (NAME_E.EXT) under their Japanese names"""
     voice_of = voice_numbers()
+    os.makedirs(os.path.join(out, 'SONICADV'), exist_ok=True)
     listed = []
     report = {'text': [0, 0, 0], 'voices': [0, 0, 0]}
     us_files = {}
@@ -167,7 +170,7 @@ def files(disc, jp_disc, out):
             continue
         if n < total:
             print(f'  {base}: {n} of {total} in English (the rest differ in size)')
-        with open(os.path.join(out, base), 'wb') as f:
+        with open(os.path.join(out, 'SONICADV', base), 'wb') as f:
             f.write(data)
         listed.append(f'{kind} {base}\n')
         r[0] += 1

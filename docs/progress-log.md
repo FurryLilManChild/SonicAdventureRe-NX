@@ -2,6 +2,21 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: English textures reach the renderer
+
+- the owner (test 213ab55): the skip crash is gone (no report), voices fine, but the title, character
+  select, file select, options, sound test and the pause menu all still Japanese. The log shows
+  the swap happened ("english: AVA_TITLE.PRS from the english folder", CON_REGULAR, AVA_CHSEL,
+  MR_MES_S ...). Cause: the decomp's renderer never takes the texels the game loads. At start it
+  indexes every texture file in its roots' SONICADV folders (engine/pc/pvr.cpp, Textures::index)
+  and draws from those files by global index and file id (sa_name_id of "SONICADV/NAME"), and its
+  roots were the build root and the disc.
+- Patch 0014: native_play_open asks a weak native_play_texture_root() for a folder to put ahead of
+  them; the first root holding a name wins. nx_english.c gives the english folder where the text
+  is English at start, so the menus' pictures follow TEXT at the next start (the menu says so).
+  make_english.py now writes the swapped files into english/SONICADV/, and the file hook points
+  there; file ids match on both sides, as both name the file "SONICADV/NAME".
+
 ## 2026-11-21: Skip crash fixed; English menus, HUD, missions and field messages
 
 - the owner (test 6021ce7): English cutscene voices and subtitles work. A crash in or after the cutscene

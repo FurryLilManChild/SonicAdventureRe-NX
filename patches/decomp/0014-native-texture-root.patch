@@ -1,0 +1,31 @@
+--- a/engine/sa1/play.c
++++ b/engine/sa1/play.c
+@@ -667,6 +667,9 @@
+     return result == SA_OK;
+ }
+ 
++/* a folder of the port's the renderer reads ahead of the disc, or null */
++const char *native_play_texture_root(void) __attribute__((weak));
++
+ void native_play_open(const char *disc, int recorded)
+ {
+     /* two pictures in flight, which a rate needs */
+@@ -678,7 +681,17 @@
+                            .resources = SA_PC_RESOURCES,
+                            .events = SA_PC_EVENTS,
+                            .platform = &options};
+-    const char *roots[3] = {build_root, disc, NULL};
++    /* a port's hook may put a folder ahead of the disc, whose textures the
++     * renderer then takes in place of the disc's of the same names, as
++     * another language's */
++    const char *front = native_play_texture_root ? native_play_texture_root()
++                                                 : NULL;
++    const char *roots[4] = {build_root, disc, NULL, NULL};
++    if (front) {
++        roots[0] = front;
++        roots[1] = build_root;
++        roots[2] = disc;
++    }
+     if (native_play_capture && native_play_capture_on &&
+         native_play_capture_on()) {
+         options.flags |= SA_PC_READBACK;

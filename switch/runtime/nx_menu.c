@@ -137,7 +137,7 @@ const char *nx_menu_hint(void)
     case ITEM_VOICES:
         return nx_english_has_voices() ? "CUTSCENE VOICES" : "NO ENGLISH FILES ON SD";
     case ITEM_TEXT:
-        return nx_english_has_text() ? "MENUS MESSAGES AND SUBTITLES" : "NO ENGLISH FILES ON SD";
+        return nx_english_has_text() ? "MENU PICTURES AT NEXT START" : "NO ENGLISH FILES ON SD";
     default:
         return "B OR + RESUMES";
     }

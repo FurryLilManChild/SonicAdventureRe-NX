@@ -269,6 +269,22 @@ static void load(void)
     load_files();
 }
 
+// the renderer reads its textures from the disc's files itself, folder by folder, the first
+// holding a name winning (engine/pc/pvr.cpp's Textures::index): the english folder goes ahead of
+// the disc where the text is English as the game starts (patch 0014). Its SONICADV folder holds
+// the files under the disc's names
+const char *native_play_texture_root(void)
+{
+    load();
+    int textures = 0;
+    for (int i = 0; i < swap_count; i++)
+        textures += !swaps[i].voices;
+    const char *root = nx_text_english && textures ? ENGLISH : NULL;
+    fprintf(stderr, "english: the renderer's textures: %s\n",
+            root ? "the english folder ahead of the disc" : "the disc's alone");
+    return root;
+}
+
 // a disc file the game opens: the English one in its place, by the settings
 int __wrap_native_hook_disc_file(const char *name, char *out, size_t size)
 {
@@ -281,7 +297,7 @@ int __wrap_native_hook_disc_file(const char *name, char *out, size_t size)
         if (!strcasecmp(swaps[i].name, base)) {
             if (swaps[i].voices ? !nx_voices_english : !nx_text_english)
                 return 0;
-            snprintf(out, size, "%s/%s", ENGLISH, swaps[i].name);
+            snprintf(out, size, "%s/SONICADV/%s", ENGLISH, swaps[i].name);
             static int told;
             if (told++ < 40)
                 fprintf(stderr, "english: %s from the english folder\n", swaps[i].name);
