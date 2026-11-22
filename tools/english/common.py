@@ -187,8 +187,10 @@ def mlt_banks(d):
 
 def swap_banks(jp, us):
     """the Japanese sound unit with each bank's bytes from the US unit where the US holds the same
-    bank (type, number, address and size); the layout stays the Japanese one.
-    Returns (bytes, swapped, total)"""
+    bank (type, number, address and room); the layout stays the Japanese one. Most banks are rooms
+    only (no bytes, data -1); the rest, a unit's own sounds, line up in both releases.
+    Returns (bytes, swapped, total), counting the banks that hold bytes only; swapped < total means
+    a bank with bytes has no US counterpart, and the unit is better left whole Japanese"""
     bj, bu = mlt_banks(jp), mlt_banks(us)
     by_key = {(b[0], b[1], b[2], b[3]): b for b in bu}
     head = bytearray(jp[:0x20 + 0x20 * len(bj)])
@@ -201,6 +203,7 @@ def swap_banks(jp, us):
             swapped += 1
         else:
             blobs.append(jp[b[4]:b[4] + b[5]] if b[5] > 0 else b'')
+    total = sum(1 for b in bj if b[5] > 0)
     out = bytearray(head)
     for i, (b, blob) in enumerate(zip(bj, blobs)):
         offset = len(out) if blob else b[4]
@@ -210,7 +213,7 @@ def swap_banks(jp, us):
         rec = list(b)
         rec[4], rec[5] = offset, len(blob) if blob else b[5]
         struct.pack_into('<8i', out, 0x20 + 0x20 * i, *rec)
-    return bytes(out), swapped, len(bj)
+    return bytes(out), swapped, total
 
 
 SCRIPT_END, SCRIPT_BRANCH, SCRIPT_FLAG, SCRIPT_VOICE, SCRIPT_CHARACTERS, SCRIPT_EVENTS, SCRIPT_FLAGS = \

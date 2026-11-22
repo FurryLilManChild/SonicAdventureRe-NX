@@ -19,6 +19,8 @@ sdmc:/switch/SonicAdventureRe-nx/english/. It writes:
                     ahead of the disc's, as it reads the disc's SONICADV folder)
   NAME.PRS/.PVR     a texture file under its Japanese name: each texture whose size matches the
                     US one in the same place is the US one (the Japanese texture's identity stays)
+  NAME.MLT          a sound unit: each bank holding sounds from the US unit (the same rooms in
+                    both), the Japanese layout kept; left Japanese where a bank has no match
   NAME.BIN          a field's messages (MR_MES, SS_MES, PAST_MES): the US file moved to the
                     Japanese file's address, its voices numbered as the Japanese game plays them
 
@@ -161,9 +163,12 @@ def files(disc, jp_disc, out):
                 made, n, total = common.swap_textures(jp, us, 0, 0)
                 data = made
             elif ext == 'MLT':
-                # not yet: the US units' voice banks differ in size from the Japanese ones, and a
-                # unit mixing the two could play the wrong sounds (common.swap_banks, for later)
-                continue
+                if jp[:4] != b'SMLT' or us[:4] != b'SMLT':
+                    continue
+                data, n, total = common.swap_banks(jp, us)
+                if n < total:
+                    print(f'  {base}: {total - n} of its {total} sound banks have no US match, left Japanese')
+                    continue
             else:
                 if 'MES' not in base:
                     continue

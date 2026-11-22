@@ -2,6 +2,19 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-22: In-game voice banks in English
+
+- The sound units line up after all: listing each unit's banks (V_AMY, V_SONICTAILS, ALIFE_SONIC)
+  shows the same type, number, address and room for every bank in both releases; most banks are
+  rooms only (data -1). The banks holding sounds (4 to 12 a unit) all have US matches, so the
+  "6 of 21" of 11-21 was every bank with sounds. common.swap_banks now counts only those, and
+  make_english.py leaves a unit Japanese if any such bank lacks a match. On the owner's discs: 17 units,
+  94 of 94 sound banks in English, each read back equal to the US bytes. Sound takes its banks
+  from the bytes the game loads (engine/sa1/sound.c, sdBankDownload), not from the disc, so the
+  file hook covers them; the VOICES setting picks them at the next load.
+- The bridge served stale copies of a staged file when its path was reused; staging under a fresh
+  folder name avoids it.
+
 ## 2026-11-21: The opening title screen stays Japanese
 
 - the owner (test bbc8170): the menus are English; the title screen looked wrong. Decoding both
