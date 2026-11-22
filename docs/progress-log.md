@@ -20,7 +20,17 @@ Newest first. One entry per session, with evidence.
   bytes zeroed (header flags 1, pad = table CRC) and SonicAdventureRe-nx.fill, and checks the fill
   gives the original image back. switch/tools/audit.py looks for any 16-byte window of a stripped
   image on the disc: the first strip (passes 1 and 2) left 819,810 windows (about 3 MB, mostly
-  .data tables), passes 1 to 3 left 757 (short names in .rodata), fixed after.
+  .data tables), passes 1 to 3 left 757. A fourth pass matches the image with the taken bytes
+  zeroed (short disc strings beside them), and a pointer whose stub twin is also a pointer counts
+  as the port's. Final, on d5d346c: 63,735,048 bytes taken from 254 disc files (328,894 pieces,
+  fill table 5.3 MB), every differing body byte found on the disc, 147,611 bytes of 32-bit
+  pointers and 5.5 MB of 64-bit pointers kept; the audit finds 65 windows, all short file names and
+  labels in the decomp's own source (CHAOHALL.ADX, tgs_sousa_t4). The stripped image is 5.9 MB as
+  xz. switch/tools/fill_check.py rebuilds it from decomp/orig as the loader does: identical to
+  the full image.
+- Test delivered to the owner (build d5d346c, the first strip): release layout in his SD folder, the
+  old english folder and image moved to _to_delete/sd_0e130fd, his US disc's SONICADV in
+  us_disc/. Not yet run on the Switch.
 - Loader: with flags 1 it reads the fill table, loads each source from disc/, PRS-decodes it,
   checks size and SHA-1, copies the pieces, and saves SonicAdventureRe-nx.built.img (flags 2),
   used on later launches while its header matches.

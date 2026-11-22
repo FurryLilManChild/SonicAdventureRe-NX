@@ -35,9 +35,13 @@ def hashes(b, step):
         lo |= a[idx + k].astype(np.uint64) << np.uint64(8 * k)
         hi |= a[idx + 8 + k].astype(np.uint64) << np.uint64(8 * k)
     h = lo * np.uint64(0x9E3779B97F4A7C15) ^ (hi + np.uint64(0x632BE59BD9B4E019)) * np.uint64(0xC2B2AE3D27D4EB4F)
-    win = a[idx[:, None] + np.arange(W)]
-    zeros = (win == 0).sum(1)
-    same = (win == win[:, :1]).all(1)
+    zeros = np.zeros(n, np.uint8)
+    same = np.ones(n, bool)
+    first = a[idx]
+    for k in range(W):
+        col = a[idx + k]
+        zeros += col == 0
+        same &= col == first
     ok = (zeros < W - 4) & ~same
     return h, ok
 

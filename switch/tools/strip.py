@@ -331,8 +331,10 @@ def main():
                 w = (at0 + k) & ~3
                 if w >= at0 and w + 4 <= at0 + size:
                     v = struct.unpack_from('<I', body, w)[0]
-                    if dom_lo <= v < dom_hi and (theirs is None or theirs[w - at0:w - at0 + 4] == bytes(4)):
-                        ptr.add(k)
+                    if dom_lo <= v < dom_hi:
+                        t = struct.unpack_from('<I', theirs, w - at0)[0] if theirs is not None else 0
+                        if t == 0 or dom_lo <= t < dom_hi:
+                            ptr.add(k)
             pointer_bytes += len(ptr)
             diff = [k for k in diff if k not in ptr]
             if theirs is None:
@@ -436,6 +438,40 @@ def main():
             k = e
         last_end = a0 + n0
     print(f'strip.py: {extra} more bytes found on the disc elsewhere in the image', file=sys.stderr, flush=True)
+
+    del ih, ok, order, sh, owner, where, cov, full, want, wins
+    # 4. the same on the image as it now stands (taken bytes zeroed): short disc strings beside bytes
+    # already taken, whose windows only match the disc once those are zero
+    view = bytearray(body)
+    for at, src, s_at, n in pieces:
+        view[at:at + n] = bytes(n)
+    ih, ok = hashes(bytes(view), 4)
+    order = np.argsort(ih)
+    sh = ih[order]
+    more = 0
+    for c in range(len(sources)):
+        d = sources[c][1]
+        if len(d) < W:
+            continue
+        hs, _ = hashes(d, 1)
+        uh, first = np.unique(hs, return_index=True)
+        pos = np.searchsorted(uh, sh)
+        pos[pos >= len(uh)] = len(uh) - 1
+        hit = (uh[pos] == sh) & ok[order]
+        for w, j in zip(order[hit].tolist(), first[pos[hit]].tolist()):
+            at = w * 4
+            if bytes(view[at:at + W]) != d[j:j + W]:
+                continue
+            for k in range(W):
+                if not covered[at + k] and at + k not in rel_words and view[at + k]:
+                    e = k
+                    while e < W and not covered[at + e] and at + e not in rel_words:
+                        e += 1
+                    take(at + k, c, j + k, e - k)
+                    for q in range(k, e):
+                        view[at + q] = 0
+                    more += e - k
+    print(f'strip.py: {more} more bytes in short disc strings', file=sys.stderr, flush=True)
 
     missing = [(k, m, what) for k, m, what in missing if not all(covered[k:m])]
     with open(out_fill + '.left.txt', 'w') as lf:
