@@ -2,6 +2,34 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-22: First-run builder (no game data in the release)
+
+- The released image must hold no disc data, so the Switch rebuilds it from the tester's
+  Japanese disc files on first launch. switch/tools/stub_build.sh builds a second image in
+  ../sare-stub with every generated body (build/gen/**/*.inc) swapped for the decomp's zero stub
+  (float bodies zeroed in their own shape by stub_floats.py, written by rename so the hard-linked
+  main tree is never touched). Its layout differs from the real image (zero tables land in .bss,
+  the compiler folds constants differently, 62651 relocations against 80544), so the two are
+  compared symbol by symbol, not byte by byte.
+- switch/tools/strip.py, three passes: (1) the content rows (sa1_data_*) against their disc files,
+  runs of 16 bytes, gaps filled where runs line up, relocated words left alone; (2) each data
+  symbol against its stub twin, the differing bytes found in the symbol's program's file,
+  1ST_READ.BIN or any disc image's file (merged string literals lose their program); the game's
+  32-bit pointers into the image are the port's and stay; (3) every 16-byte window of the image
+  found anywhere on the disc (numpy hashes), grown byte by byte. It writes the image with those
+  bytes zeroed (header flags 1, pad = table CRC) and SonicAdventureRe-nx.fill, and checks the fill
+  gives the original image back. switch/tools/audit.py looks for any 16-byte window of a stripped
+  image on the disc: the first strip (passes 1 and 2) left 819,810 windows (about 3 MB, mostly
+  .data tables), passes 1 to 3 left 757 (short names in .rodata), fixed after.
+- Loader: with flags 1 it reads the fill table, loads each source from disc/, PRS-decodes it,
+  checks size and SHA-1, copies the pieces, and saves SonicAdventureRe-nx.built.img (flags 2),
+  used on later launches while its header matches.
+- English on the Switch: switch/loader/english_build.c is make_english.py in C, the maps compiled
+  in (switch/tools/maps2c.py). If us_disc/ sits beside the .nro and english/made.txt doesn't
+  hold this build's map CRC, the loader makes english/. Host test on the owner's discs' files: every
+  output file byte for byte equal to make_english.py's (1054 subtitles, 121 hints, 124 text
+  files with 805 of 834 pieces, 17 voice units with 94 of 94 banks), 5 s on the PC.
+
 ## 2026-11-22: Tikal's hints in English
 
 - The stages' hint pages are compiled into each stage module (modules/stgNN/scripts.c, the

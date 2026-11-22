@@ -6,12 +6,21 @@
 // entries, its heap less the part the image's pages came from. The game returns here when it
 // ends (its return address is loader_return), and the image is unmapped before hbloader takes
 // its heap back. Proven piece by piece by probes 1 and 2 on the owner's Switch.
+//
+// The image the port ships holds none of the disc's data (switch/tools/strip.py): its flags are 1,
+// and SonicAdventureRe-nx.fill says where each zeroed byte comes from on the player's Japanese
+// disc, in disc/. The first launch fills it from there (each file checked by its SHA-1) and saves
+// the whole image as SonicAdventureRe-nx.built.img (flags 2, the same header otherwise), which
+// later launches load as it is.
 #include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <switch.h>
+
+#include "english_build.h"
 
 #define DIR "sdmc:/switch/SonicAdventureRe-nx"
 #define CARVE (256ULL << 20) // the heap's end, kept for the image's pages
@@ -135,6 +144,184 @@ struct image_segment {
     u32 flags, pad;
 };
 
+// --- the first launch's build from the player's disc ---
+
+struct fill_header {
+    char magic[8];
+    u32 sources, pieces, crc, pad;
+};
+struct fill_source {
+    char path[32];
+    u32 size;
+    u8 sha1[20];
+    u32 prs, pad;
+};
+struct fill_piece {
+    u32 at, source, from, length;
+};
+
+// Sega's PRS: an LZ77 with flag bits read low bit first; gives the bytes written, or 0 if src ends
+// early or out would overflow
+static u64 prs_decode(const u8 *src, u64 src_size, u8 *out, u64 room)
+{
+    u64 in = 0, o = 0;
+    u32 flags = 0, left = 0;
+#define PRS_BIT()                                                                                                  \
+    ({                                                                                                         \
+        if (!left) {                                                                                           \
+            if (in >= src_size)                                                                                \
+                return 0;                                                                                      \
+            flags = src[in++];                                                                                 \
+            left = 8;                                                                                          \
+        }                                                                                                      \
+        u32 b_ = flags & 1;                                                                                    \
+        flags >>= 1;                                                                                           \
+        left--;                                                                                                \
+        b_;                                                                                                    \
+    })
+    for (;;) {
+        if (PRS_BIT()) {
+            if (in >= src_size || o >= room)
+                return 0;
+            out[o++] = src[in++];
+            continue;
+        }
+        long offset;
+        u64 size;
+        if (PRS_BIT()) {
+            if (in + 1 >= src_size)
+                return 0;
+            u32 word = src[in] | src[in + 1] << 8;
+            in += 2;
+            if (!word)
+                break;
+            offset = (long)(word >> 3) - 0x2000;
+            size = word & 7;
+            if (size)
+                size += 2;
+            else {
+                if (in >= src_size)
+                    return 0;
+                size = (u64)src[in++] + 1;
+            }
+        } else {
+            u32 hi = PRS_BIT();
+            u32 lo = PRS_BIT();
+            size = (hi << 1 | lo) + 2;
+            if (in >= src_size)
+                return 0;
+            offset = (long)src[in++] - 0x100;
+        }
+        if ((long)o + offset < 0 || o + size > room)
+            return 0;
+        for (u64 i = 0; i < size; i++, o++)
+            out[o] = out[o + offset];
+    }
+#undef PRS_BIT
+    return o;
+}
+
+static u8 *read_file(const char *path, u64 *size)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    u8 *buf = n > 0 ? malloc((size_t)n) : NULL;
+    if (!buf || fread(buf, 1, (size_t)n, f) != (size_t)n) {
+        free(buf);
+        fclose(f);
+        return NULL;
+    }
+    fclose(f);
+    *size = (u64)n;
+    return buf;
+}
+
+static int by_source(const void *a, const void *b)
+{
+    const struct fill_piece *x = a, *y = b;
+    return x->source != y->source ? (x->source < y->source ? -1 : 1) : (x->at < y->at ? -1 : x->at > y->at);
+}
+
+// fills the image (dst, size bytes) from the disc; false with the reason said
+static bool fill_from_disc(u8 *dst, u64 size, u32 crc)
+{
+    u64 n = 0;
+    u8 *table = read_file(DIR "/SonicAdventureRe-nx.fill", &n);
+    struct fill_header *fh = (struct fill_header *)table;
+    if (!table || n < sizeof *fh || memcmp(fh->magic, "SARNXFL1", 8) ||
+        n < sizeof *fh + fh->sources * sizeof(struct fill_source) + fh->pieces * (u64)sizeof(struct fill_piece)) {
+        say("can't read %s/SonicAdventureRe-nx.fill: copy it beside the .nro\n", DIR);
+        free(table);
+        return false;
+    }
+    if (fh->crc != crc) {
+        say("SonicAdventureRe-nx.fill is from another build than SonicAdventureRe-nx.img: copy both again\n");
+        free(table);
+        return false;
+    }
+    struct fill_source *src = (struct fill_source *)(fh + 1);
+    struct fill_piece *pc = (struct fill_piece *)(src + fh->sources);
+    qsort(pc, fh->pieces, sizeof *pc, by_source);
+    say("\nFirst launch: building the game from your Japanese disc (%u files). This takes a minute,\n"
+        "once; later launches start at once.\n\n", fh->sources);
+    u32 k = 0;
+    for (u32 s = 0; s < fh->sources; s++) {
+        char path[160];
+        snprintf(path, sizeof path, DIR "/disc/%s", src[s].path);
+        u64 raw_size = 0;
+        u8 *raw = read_file(path, &raw_size);
+        if (!raw) {
+            say("\nMissing from your disc folder: %s\n(the Japanese disc's files go in %s/disc/)\n", src[s].path, DIR);
+            free(table);
+            return false;
+        }
+        u8 *data = raw;
+        if (src[s].prs) {
+            data = malloc(src[s].size + 16);
+            if (!data || prs_decode(raw, raw_size, data, src[s].size) != src[s].size) {
+                say("\n%s doesn't decode as this port expects\n", src[s].path);
+                free(raw);
+                free(data);
+                free(table);
+                return false;
+            }
+            free(raw);
+        } else if (raw_size != src[s].size) {
+            say("\n%s is %lu bytes, not the %u of the Japanese disc (HDR-0001, v1.007)\n", src[s].path, raw_size,
+                src[s].size);
+            free(raw);
+            free(table);
+            return false;
+        }
+        u8 sum[20];
+        sha1CalculateHash(sum, data, src[s].size);
+        if (memcmp(sum, src[s].sha1, 20)) {
+            say("\n%s isn't the Japanese disc's (HDR-0001, v1.007): this port needs that disc\n", src[s].path);
+            free(data);
+            free(table);
+            return false;
+        }
+        for (; k < fh->pieces && pc[k].source == s; k++) {
+            if ((u64)pc[k].at + pc[k].length > size || (u64)pc[k].from + pc[k].length > src[s].size) {
+                say("\nthe fill table points past %s\n", src[s].path);
+                free(data);
+                free(table);
+                return false;
+            }
+            memcpy(dst + pc[k].at, data + pc[k].from, pc[k].length);
+        }
+        free(data);
+        if (s % 16 == 15 || s + 1 == fh->sources)
+            say("  %u of %u files\n", s + 1, fh->sources);
+    }
+    free(table);
+    return true;
+}
+
 static bool read_all(FILE *f, void *to, u64 size)
 {
     u8 *p = to;
@@ -169,6 +356,28 @@ static bool place(FILE *f, const struct image_header *h, const struct image_segm
     if (!rel || !read_all(f, rel, h->relocations * 4ULL)) {
         say("can't read the image's address list\n");
         return false;
+    }
+    if (h->flags & 1) {
+        if (!fill_from_disc(dst, size, h->pad))
+            return false;
+        // saved whole, for the next launch: the header (flags 2), segments and addresses
+        say("saving the built game for later launches...\n");
+        FILE *b = fopen(DIR "/SonicAdventureRe-nx.built.tmp", "wb");
+        struct image_header bh = *h;
+        bh.flags = 2;
+        bool ok = b && fwrite(&bh, sizeof bh, 1, b) == 1 && fwrite(seg, sizeof seg[0], h->segments, b) == h->segments;
+        for (u32 i = 0; ok && i < h->segments; i++) {
+            static const u8 zeros[8];
+            u64 pad = (8 - seg[i].filesz % 8) % 8;
+            ok = fwrite(dst + seg[i].offset, 1, seg[i].filesz, b) == seg[i].filesz && fwrite(zeros, 1, pad, b) == pad;
+        }
+        ok = ok && fwrite(rel, 4, h->relocations, b) == h->relocations;
+        ok = b && !fclose(b) && ok;
+        if (ok) {
+            remove(DIR "/SonicAdventureRe-nx.built.img");
+            ok = !rename(DIR "/SonicAdventureRe-nx.built.tmp", DIR "/SonicAdventureRe-nx.built.img");
+        }
+        say(ok ? "saved\n" : "couldn't save it (the game still starts; the next launch builds again)\n");
     }
     for (u32 i = 0; i < h->relocations; i++)
         *(u64 *)(dst + rel[i]) += delta;
@@ -226,6 +435,35 @@ int main(int argc, char **argv)
         fread(seg, sizeof seg[0], h.segments, f) != h.segments) {
         say("can't read %s/SonicAdventureRe-nx.img\n", DIR);
         goto fail;
+    }
+    if (h.flags & 1) {
+        // the built image, where it is this image's
+        FILE *b = fopen(DIR "/SonicAdventureRe-nx.built.img", "rb");
+        struct image_header bh;
+        static struct image_segment bseg[8];
+        if (b && fread(&bh, sizeof bh, 1, b) == 1 && bh.flags == 2 && bh.segments == h.segments &&
+            fread(bseg, sizeof bseg[0], bh.segments, b) == bh.segments && !memcmp(bseg, seg, sizeof seg[0] * h.segments)) {
+            struct image_header want = h;
+            want.flags = 2;
+            if (!memcmp(&want, &bh, sizeof bh)) {
+                say("the game built from your disc: SonicAdventureRe-nx.built.img\n");
+                fclose(f);
+                f = b;
+                h = bh;
+                b = NULL;
+            }
+        }
+        if (b)
+            fclose(b);
+    }
+    // the English layer, made once from the US disc's files where the player put them
+    {
+        struct stat st;
+        if (!stat(DIR "/us_disc", &st) && S_ISDIR(st.st_mode) && !english_current(DIR "/english")) {
+            mkdir(DIR "/english", 0777);
+            if (english_build(DIR "/us_disc", DIR "/disc", DIR "/english", say))
+                say("the English layer could not be made: the game starts in Japanese\n");
+        }
     }
     if (h.end - h.start > g_carve_size) {
         say("the image (%lu MB) is bigger than the heap kept for it (%lu MB)\n", (h.end - h.start) >> 20,

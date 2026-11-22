@@ -27,3 +27,4 @@ saves/
 *.elf
 switch_sd/
 __pycache__/
+switch/build-stub/

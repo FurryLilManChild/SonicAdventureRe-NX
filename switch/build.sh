@@ -5,6 +5,10 @@
 # (its symbol table, which the game reads; debug info stripped).
 #
 #   switch/build.sh [--any-commit]
+#
+# SARE_DECOMP (a copy of decomp/, default decomp) and SARE_BUILD (default switch/build) build
+# another copy into another folder, with nothing copied to out/: switch/tools/stub_build.sh's
+# build from the decomp's zero bodies (build/stub/), which switch/tools/strip.py compares.
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -22,11 +26,12 @@ GCC=$(ls -d "$A64"/lib/gcc/aarch64-none-elf/* | tail -1)
 TOOLS=${SWITCH_TOOLS:-$HOME/bin}
 NVK=${NVK_SDK:-/opt/nvk-sdk}
 PORTLIBS=${PORTLIBS:-$DKP/portlibs/switch}
-B="$root/switch/build"
-N="$root/decomp/build/engine/native"
+D="${SARE_DECOMP:-decomp}"
+B="${SARE_BUILD:-$root/switch/build}"
+N="$root/$D/build/engine/native"
 mkdir -p "$B"
 
-sh tools/apply_patches.sh
+[ -n "$SARE_DECOMP" ] || sh tools/apply_patches.sh
 [ -f build/ref32/Gep32.so ] || sh tools/ref32/build.sh
 [ -x "$TOOLS/elf2nro" ] || sh switch/tools/build_switch_tools.sh "$TOOLS"
 
@@ -47,31 +52,31 @@ clang --target=aarch64-none-elf -c switch/runtime/nx_base.S -o "$B/nx_base.o"
 echo "== the game's objects (the decomp's native slice, for Horizon)"
 # the PC backend's and SA1 client's objects lie outside build/engine/native, where make's request
 # record doesn't reach: they are rebuilt when they were built for another system
-if [ "$(cat decomp/build/engine/replay/.system 2>/dev/null)" != nx ]; then
-    rm -f decomp/build/engine/replay/*.o decomp/build/engine/sa1/*.o decomp/build/engine/runtime/*.o
-    mkdir -p decomp/build/engine/replay
-    echo nx > decomp/build/engine/replay/.system
+if [ "$(cat $D/build/engine/replay/.system 2>/dev/null)" != nx ]; then
+    rm -f $D/build/engine/replay/*.o $D/build/engine/sa1/*.o $D/build/engine/runtime/*.o
+    mkdir -p $D/build/engine/replay
+    echo nx > $D/build/engine/replay/.system
 fi
 A64_HERE="$root/tools/a64" . tools/a64/env-nx.sh
 export NATIVE_STUB_LIBRARIES="$A64/aarch64-none-elf/lib/libc.a $A64/aarch64-none-elf/lib/libm.a \
 $A64/aarch64-none-elf/lib/libsysbase.a $DKP/libnx/lib/libnx.a $GCC/libgcc.a $B/nx_main.o $B/nx_domain.o $B/nx_libc.o $B/nx_base.o"
 # the objects of the decomp's link, which make -n names (its own link is Linux's, and isn't run)
-link=$(cd decomp && make -n build/engine/native/play 2>/dev/null | grep -- " -o build/engine/native/play " | tail -1)
+link=$(cd $D && make -n build/engine/native/play 2>/dev/null | grep -- " -o build/engine/native/play " | tail -1)
 [ -n "$link" ] || { echo "switch/build.sh: no link command from make -n" >&2; exit 1; }
 targets=$(printf '%s\n' $link | grep '\.o$' | grep -v -e 'Scrt1\|crti\|crtbegin\|crtend\|crtn')
-if ! ( cd decomp && make -j${JOBS:-2} $targets > "$B/make.log" 2>&1 ); then
+if ! ( cd $D && make -j${JOBS:-2} $targets > "$B/make.log" 2>&1 ); then
     grep -e "error" -e "\*\*\*" "$B/make.log" | head -20 >&2
     echo "switch/build.sh: the objects failed (switch/build/make.log)" >&2
     exit 1
 fi
 # the link line again, now that the tables it reads exist
-link=$(cd decomp && make -n build/engine/native/play 2>/dev/null | grep -- " -o build/engine/native/play " | tail -1)
-objects=$(printf '%s\n' $link | grep '\.o$' | grep -v -e 'Scrt1\|crti\|crtbegin\|crtend\|crtn' | sed "s|^build/|$root/decomp/build/|")
+link=$(cd $D && make -n build/engine/native/play 2>/dev/null | grep -- " -o build/engine/native/play " | tail -1)
+objects=$(printf '%s\n' $link | grep '\.o$' | grep -v -e 'Scrt1\|crti\|crtbegin\|crtend\|crtn' | sed "s|^build/|$root/$D/build/|")
 wraps=$(printf '%s\n' $link | grep -- '--wrap=' | sed 's|^-Wl,||')
 aliases=$(awk '{ printf " --defsym=%s=%s", $1, $2 }' "$N/aliases.txt")
 # the window is switch/runtime/window_nx.cpp's (a VI surface for NVK, libnx's pad and audio
 # renderer), in place of the decomp's headless window_none
-"$CXX" -std=c++17 -O2 -g -Wall -Wextra -Idecomp/engine/include -Idecomp/engine/pc -isystem "$NVK/include" \
+"$CXX" -std=c++17 -O2 -g -Wall -Wextra -I$D/engine/include -I$D/engine/pc -isystem "$NVK/include" \
     -c switch/runtime/window_nx.cpp -o "$B/window_nx.o"
 printf '%s\n' $objects | grep -q '/window_none\.o$' || { echo "switch/build.sh: no window_none.o in the link" >&2; exit 1; }
 objects=$(printf '%s\n' $objects | sed "s|^.*/window_none\.o$|$B/window_nx.o|")
@@ -94,8 +99,12 @@ aarch64-linux-gnu-objcopy --only-keep-debug "$B/SonicAdventureRe-nx.stripped.elf
 
 echo "== the loader"
 clang $CF -fPIE -c switch/loader/main.c -o "$B/loader.o"
+# the English builder (english_build.c) with its maps, made from tools/english/*_map.txt
+python3 switch/tools/maps2c.py tools/english "$B/english_maps.c"
+clang $CF -fPIE -c switch/loader/english_build.c -o "$B/english_build.o"
+clang $CF -fPIE -c "$B/english_maps.c" -o "$B/english_maps.o"
 aarch64-linux-gnu-ld -T switch/ld/switch.ld -pie --no-dynamic-linker --gc-sections -z text -z now --build-id=sha1 \
-    --wrap=envSetup "$GCC/crti.o" "$GCC/crtbegin.o" "$B/loader.o" -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" \
+    --wrap=envSetup "$GCC/crti.o" "$GCC/crtbegin.o" "$B/loader.o" "$B/english_build.o" "$B/english_maps.o" -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" \
     -L"$GCC" --start-group -lnx -lc -lm -lgcc -lsysbase --end-group "$GCC/crtend.o" "$GCC/crtn.o" -o "$B/loader.elf"
 "$TOOLS/nacptool" --create "SonicAdventureRe-nx" "FurryLilManChild" "0.0.1-$commit" "$B/loader.nacp"
 # the icon is the owner's image, kept out of git (assets/ is ignored); a copy lies in his
@@ -107,6 +116,10 @@ else
     "$TOOLS/elf2nro" "$B/loader.elf" "$B/SonicAdventureRe-nx.nro" --nacp="$B/loader.nacp"
 fi
 
+if [ -n "$SARE_BUILD" ]; then
+    echo "== built $commit into $B (a copy's build: nothing goes to out/)"
+    exit 0
+fi
 out="$root/out/sd/switch/SonicAdventureRe-nx"
 mkdir -p "$out"
 cp "$B/SonicAdventureRe-nx.nro" "$B/SonicAdventureRe-nx.img" "$B/SonicAdventureRe-nx.elf" "$out/"
