@@ -38,9 +38,10 @@ NOTE
 cat > "$R/us_disc/PUT_US_DISC_HERE.txt" <<'NOTE'
 Optional, for English voices and text: put your US Sonic Adventure disc image in this folder
 (a .gdi with its track files, or a .cue with its .bin files). The first launch unpacks it and
-makes the english folder. Choose VOICES and TEXT in the port menu (+ and - together).
+makes the english folder. Choose VOICES and TEXT in the port menu (Minus and Plus together).
 NOTE
-cp switch/release/README.txt "$R/README.txt" 2>/dev/null || true
+cp switch/release/README.txt "$R/README.txt"
+cp COPYING "$R/COPYING.txt"
 # nothing from the disc may be left: the image's header must say "to be filled"
 python3 - "$R/SonicAdventureRe-nx.img" <<'EOF'
 import struct, sys
@@ -49,3 +50,13 @@ assert h[0] == b'SAREIMG1' and h[7] == 1, 'the release image is not stripped'
 EOF
 ls -la "$R"
 (cd "$R" && sha256sum SonicAdventureRe-nx.nro SonicAdventureRe-nx.img SonicAdventureRe-nx.fill SonicAdventureRe-nx.elf)
+
+# the zip (switch/SonicAdventureRe-nx/ at its root), the files kept for reading crash reports, and
+# the release notes' hashes
+V=${SARE_VERSION:-0.5.0}
+Z=out/release/SonicAdventureRe-nx-$V-switch.zip
+(cd out/release && rm -f "SonicAdventureRe-nx-$V-switch.zip" && zip -q -r -9 "SonicAdventureRe-nx-$V-switch.zip" switch)
+cp "$B/SonicAdventureRe-nx.full.elf" "out/release/release-$V.full.elf"
+cp "$B/loader.elf" "out/release/release-$V.loader.elf"
+sha256sum "$Z" "$R/SonicAdventureRe-nx.nro" > out/release/sha256.txt
+cat out/release/sha256.txt

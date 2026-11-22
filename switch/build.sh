@@ -9,6 +9,8 @@
 # SARE_DECOMP (a copy of decomp/, default decomp) and SARE_BUILD (default switch/build) build
 # another copy into another folder, with nothing copied to out/: switch/tools/stub_build.sh's
 # build from the decomp's zero bodies (build/stub/), which switch/tools/strip.py compares.
+# SARE_RELEASE=1 makes a release build: no per-picture timing file, the frame counter off by
+# default. SARE_VERSION (default 0.5.0) is the version the Homebrew Menu shows.
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -20,6 +22,9 @@ if [ "$1" != --any-commit ]; then
     fi
 fi
 commit=$(git rev-parse --short HEAD)
+version=${SARE_VERSION:-0.5.0}
+RELEASE_CF=
+[ "$SARE_RELEASE" = 1 ] && RELEASE_CF=-DSARE_RELEASE
 DKP=${DEVKITPRO:-/opt/devkitpro}
 A64=${DEVKITA64_LIBS:-/opt/devkitpro-win/devkitA64}
 GCC=$(ls -d "$A64"/lib/gcc/aarch64-none-elf/* | tail -1)
@@ -37,7 +42,7 @@ mkdir -p "$B"
 
 echo "== the Switch runtime (build $commit)"
 CF="--target=aarch64-none-elf -march=armv8-a+crc+crypto -mtune=cortex-a57 -O2 -g -Wall -Wextra -D__SWITCH__
-    -ffunction-sections -isystem $DKP/libnx/include -isystem $A64/aarch64-none-elf/include -DNX_BUILD=\"$commit\""
+    -ffunction-sections -isystem $DKP/libnx/include -isystem $A64/aarch64-none-elf/include -DNX_BUILD=\"$commit\" -DSARE_VERSION=\"$version\" $RELEASE_CF"
 clang $CF -fno-pic -c switch/runtime/nx_main.c -o "$B/nx_main.o"
 clang $CF -fno-pic -c switch/runtime/nx_domain.c -o "$B/nx_domain.o"
 clang $CF -fno-pic -c switch/runtime/nx_libc.c -o "$B/nx_libc.o"
@@ -107,7 +112,7 @@ clang $CF -fPIE -c "$B/english_maps.c" -o "$B/english_maps.o"
 aarch64-linux-gnu-ld -T switch/ld/switch.ld -pie --no-dynamic-linker --gc-sections -z text -z now --build-id=sha1 \
     --wrap=envSetup "$GCC/crti.o" "$GCC/crtbegin.o" "$B/loader.o" "$B/disc_extract.o" "$B/english_build.o" "$B/english_maps.o" -L"$DKP/libnx/lib" -L"$A64/aarch64-none-elf/lib" \
     -L"$GCC" --start-group -lnx -lc -lm -lgcc -lsysbase --end-group "$GCC/crtend.o" "$GCC/crtn.o" -o "$B/loader.elf"
-"$TOOLS/nacptool" --create "SonicAdventureRe-nx" "FurryLilManChild" "0.0.1-$commit" "$B/loader.nacp"
+"$TOOLS/nacptool" --create "SonicAdventureRe-nx" "FurryLilManChild" "$version" "$B/loader.nacp"
 # the icon is the owner's image, kept out of git (assets/ is ignored); a copy lies in his
 # C:\SonicAdventureRe-nx\assets\icon.jpg (256x256 JPEG)
 if [ -f assets/icon.jpg ]; then

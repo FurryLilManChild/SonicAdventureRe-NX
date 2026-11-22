@@ -2,6 +2,18 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-22: release 0.5.0 (needs testing)
+
+- the owner (build e62c854, clean SD folder with only his two disc images): it worked, first launch
+  unpacked both images, made english/, built the image; then the game.
+- Release changes: SARE_VERSION (0.5.0, the Homebrew Menu's version; the loader's and the game's
+  first log lines say it); SARE_RELEASE=1: no per-picture timing file (--times), the frame counter
+  off in a first run's settings. First-run settings now list "translucency accurate". COPYING
+  (GPL-2.0, as SA-nx's code it carries). README.md and the zip's README.txt rewritten for players,
+  with the English layer's coverage (done and not done). make_release.sh also zips
+  SonicAdventureRe-nx-0.5.0-switch.zip (switch/SonicAdventureRe-nx/: .nro, .img, .fill, .elf,
+  README.txt, COPYING.txt, disc/ and us_disc/ notes) and keeps the full and loader ELFs.
+
 ## 2026-11-22: TRANSLUCENCY in the port menu
 
 - the owner sees big slowdowns in smoke, fog and dust, as in SA-nx. The decomp's renderer composes the

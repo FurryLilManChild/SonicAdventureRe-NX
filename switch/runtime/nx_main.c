@@ -218,11 +218,17 @@ static const char default_settings[] =
     "resolution 1\n"
     "# the port's resolution: 1x (640x480), 1.5x (960x720) or 2x (1280x960)\n"
     "scale 1x\n"
+    "# translucency: accurate (per pixel, as the Dreamcast) or fast (per triangle)\n"
+    "translucency accurate\n"
     "# the port's captures for Claude (stick clicks): 1 on, 0 off; on costs speed\n"
     "capture 0\n"
     "# the port's own: sound volume in percent, the frame counter 1 on 0 off\n"
     "volume 100\n"
+#ifdef SARE_RELEASE
+    "counter 0\n"
+#else
     "counter 1\n"
+#endif
     "# the English layer (english/, made from a US disc): english or japanese, each\n"
     "voices english\n"
     "text english\n";
@@ -315,7 +321,7 @@ int main(int argc, char **argv)
     setvbuf(stderr, NULL, _IOLBF, 0);
     freopen(DIR "/SonicAdventureRe-nx.out.log", "a", stdout);
     setvbuf(stdout, NULL, _IOFBF, 1 << 16);
-    line("\n== SonicAdventureRe-nx (build %s): the game, in a window (Vulkan, NVK)\n", NX_BUILD);
+    line("\n== SonicAdventureRe-nx %s (build %s): the game, in a window (Vulkan, NVK)\n", SARE_VERSION, NX_BUILD);
     line("image at %p in window %p (linked for %p)\n", (void *)__start__, (void *)native_domain_base,
          (void *)nx_link_window_number);
     u32 clk[3];
@@ -328,15 +334,25 @@ int main(int argc, char **argv)
         threadStart(&beat);
         beat_running = 1;
     }
+#ifdef SARE_RELEASE
+    // a release writes no per-picture timing file
+    static char *args[] = {"play", "--settings", DIR "/settings.txt", "--card", DIR "/card.bin",
+                           "--window", DIR "/disc", NULL};
+    int argn = 7;
+#else
     static char *args[] = {"play",
                            "--settings", DIR "/settings.txt",
                            "--card", DIR "/card.bin",
                            "--window", DIR "/disc",
                            "--times", DIR "/SonicAdventureRe-nx.times.txt",
                            NULL};
-    line("starting the game: play --settings %s --card %s --window %s --times %s\n\n", args[2], args[4], args[6],
-         args[8]);
-    int rc = native_main(9, args);
+    int argn = 9;
+#endif
+    line("starting the game:");
+    for (int i = 0; i < argn; i++)
+        line(" %s", args[i]);
+    line("\n\n");
+    int rc = native_main(argn, args);
     fprintf(stderr, "nx: the game returned %d\n", rc);
     _exit(rc);
 }

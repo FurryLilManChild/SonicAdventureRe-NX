@@ -424,7 +424,7 @@ int main(int argc, char **argv)
     consoleInit(NULL);
     mkdir(DIR, 0777);
     logf = fopen(DIR "/SonicAdventureRe-nx.log", "a");
-    say("\n== SonicAdventureRe-nx loader (build %s) ==\n", NX_BUILD);
+    say("\n== SonicAdventureRe-nx %s loader (build %s) ==\n", SARE_VERSION, NX_BUILD);
     if (envGetOwnProcessHandle() == INVALID_HANDLE) {
         say("Launch through title takeover (hold R while opening a game), not the Album.\n");
         goto fail;
