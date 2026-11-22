@@ -2,6 +2,16 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-21: The opening title screen stays Japanese
+
+- the owner (test bbc8170): the menus are English; the title screen looked wrong. Decoding both
+  releases' textures (a dumper outside the repo) showed why: the US AVA_GTITLE0 has its 8
+  backgrounds with the logo cut out and 7 textures more (the logo, PressStartButton, the
+  copyright, the Sonic Team mark) the US game draws on top; the Japanese game draws only the 8.
+  AVA_TITLE (the menu), AVA_OPTION, AVA_FILESEL and TUTOMSG_SONIC line up texture for texture
+  (the extra US textures come at the end). make_english.py keeps AVA_GTITLE0 Japanese
+  (KEEP_JAPANESE); the owner agreed: it reads Sonic Adventure and its Press Start is English already.
+
 ## 2026-11-21: English textures reach the renderer
 
 - the owner (test 213ab55): the skip crash is gone (no report), voices fine, but the title, character

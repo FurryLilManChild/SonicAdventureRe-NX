@@ -111,6 +111,15 @@ def voice_numbers():
     return lambda us: back.get(us, 0x2000 + us)
 
 
+# files the US release laid out anew, whose textures match the Japanese ones in size but not in
+# use: kept Japanese
+KEEP_JAPANESE = {
+    # the opening title screen: the US backgrounds have the logo cut out, which the US game draws
+    # from textures of its own (8 to 14) that the Japanese game never draws
+    'AVA_GTITLE0.PRS',
+}
+
+
 def files(disc, jp_disc, out):
     """the US disc's English files (NAME_E.EXT) under their Japanese names"""
     voice_of = voice_numbers()
@@ -131,6 +140,9 @@ def files(disc, jp_disc, out):
         stem, ext = name.rsplit('_E.', 1)
         base = stem + '.' + ext
         if ext not in ('PRS', 'PVR', 'MLT', 'BIN') or base not in jp_files:
+            continue
+        if base in KEEP_JAPANESE:
+            print(f'  {base}: kept Japanese (the US laid it out anew)')
             continue
         us = open(us_files[name], 'rb').read()
         jp = open(jp_files[base], 'rb').read()
