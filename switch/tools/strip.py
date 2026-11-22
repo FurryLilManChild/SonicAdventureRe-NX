@@ -111,6 +111,8 @@ def map_ranges(path):
             out.append((addr, size, p.group(1)))
         elif '/decomp/build/engine/native/obj/' in obj or '/sare-stub/build/engine/native/obj/' in obj:
             out.append((addr, size, '1st_read'))
+        elif re.search(r'/switch/build[^/]*/(nx_|window_nx|runner)[^/]*\.o$', obj):
+            out.append((addr, size, 'port'))  # the port's own code and text: never the disc's
     out.sort()
     return out
 
@@ -343,6 +345,8 @@ def main():
                 continue
             body_bytes += len(diff)
             prog = program_at(at0) or '1st_read'
+            if prog == 'port':
+                continue
             cands = [c for c in (source(prog), source('1st_read')) if c is not None]
             for c in cands:
                 near[c] = match_region(at0, mine, sources[c][1], c, near.get(c, 0))[1]
