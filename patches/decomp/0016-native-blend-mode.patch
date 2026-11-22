@@ -1,0 +1,23 @@
+diff --git a/engine/pc/scene.cpp b/engine/pc/scene.cpp
+index 8d436af..04c235b 100644
+--- a/engine/pc/scene.cpp
++++ b/engine/pc/scene.cpp
+@@ -840,8 +840,18 @@ void Scene::lines(const sa_triangles &t, const sa_point *points,
+     }
+ }
+ 
++/* a port's hook may choose the blend order each picture (an SA_PC_BLEND_*),
++ * or keep open()'s with -1 */
++extern "C" int native_blend_mode(void) __attribute__((weak));
++
+ void Scene::finish()
+ {
++    if (native_blend_mode) {
++        int mode = native_blend_mode();
++        if (mode >= 0) {
++            blend_ = static_cast<uint32_t>(mode);
++        }
++    }
+     /* the PowerVR's lists in order: opaque, then blend. a host's sort goes
+      * from the farthest, and keeps the draws' order in a tie */
+     if (blend_ != SA_PC_BLEND_PIXEL) {

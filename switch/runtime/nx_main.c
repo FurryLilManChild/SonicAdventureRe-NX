@@ -45,6 +45,7 @@ extern int nx_capture_wide;
 extern int nx_capture_enabled;
 extern int nx_volume, nx_resolution, nx_settings_capture, nx_overlay_on, nx_halves;
 extern int nx_voices_english, nx_text_english;
+extern int nx_translucency_fast;
 int nx_english_has_voices(void);
 int nx_english_has_text(void);
 extern volatile int nx_overlay_fps;
@@ -273,6 +274,8 @@ static void settings_log(const char *path)
                 nx_voices_english = strcmp(value, "japanese") != 0;
             if (!strcmp(name, "text"))
                 nx_text_english = strcmp(value, "japanese") != 0;
+            if (!strcmp(name, "translucency"))
+                nx_translucency_fast = !strcmp(value, "fast");
             if (!strcmp(name, "counter"))
                 nx_overlay_on = atoi(value) != 0;
         }
@@ -282,6 +285,7 @@ static void settings_log(const char *path)
     if (!scale_seen)
         nx_halves = nx_resolution == 2 ? 4 : 2;
     line("  (the port's resolution: %s)\n", nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x");
+    line("  (translucency: %s)\n", nx_translucency_fast ? "fast, per triangle" : "accurate, per pixel");
     line("  (English: voices %s, text %s; the english folder holds voices: %s, subtitles: %s)\n",
          nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese",
          nx_english_has_voices() ? "yes" : "no", nx_english_has_text() ? "yes" : "no");

@@ -2,6 +2,17 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-22: TRANSLUCENCY in the port menu
+
+- the owner sees big slowdowns in smoke, fog and dust, as in SA-nx. The decomp's renderer composes the
+  blend list per pixel (SA_PC_BLEND_PIXEL: each pixel's fragments go to lists in GPU memory, a
+  compute pass sorts and blends them), the PowerVR's contract; it also has host orders
+  (SA_PC_BLEND_ORDER, DRAW, TRIANGLE: the triangles sorted farthest first on the CPU and blended
+  by the GPU as they draw). play.c fixes PIXEL.
+- Patch 0016: Scene::finish asks a weak native_blend_mode() each picture (-1 keeps open()'s).
+  nx_menu.c answers PIXEL or TRIANGLE from the new TRANSLUCENCY item (ACCURATE or FAST), at once,
+  saved as "translucency accurate|fast"; the start log says which. Default ACCURATE.
+
 ## 2026-11-22: Disc images on the Switch
 
 - switch/loader/disc_extract.c: the loader unpacks a .gdi or a Redump .cue (raw 2352 or 2048

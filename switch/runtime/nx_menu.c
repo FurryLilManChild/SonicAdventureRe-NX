@@ -37,6 +37,14 @@ int nx_volume = 100;           // percent, read by the sound thread
 int nx_resolution = 1;         // settings.txt's resolution (the decomp's, kept at 1)
 int nx_halves = 2;             // the port's resolution in halves of 640x480: 2, 3 or 4 (1X to 2X)
 int nx_settings_capture;       // the captures setting for the next start
+int nx_translucency_fast;      // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster)
+
+// the renderer asks each picture how its translucent triangles compose (patch 0016):
+// SA_PC_BLEND_PIXEL (0) or SA_PC_BLEND_TRIANGLE (3)
+int native_blend_mode(void)
+{
+    return nx_translucency_fast ? 3 : 0;
+}
 
 // the raster asks for the resolution each pad read (patch 0006)
 uint32_t native_resolution_halves(void)
@@ -49,7 +57,7 @@ static const char *scale_name(int halves)
     return halves == 3 ? "1.5X" : halves == 4 ? "2X" : "1X";
 }
 
-enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_VOICES, ITEM_TEXT, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
+enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
 
 static int cursor;
 static int quit_armed;
@@ -86,6 +94,8 @@ static void save_settings(void)
             "resolution %d\n"
             "# the port's resolution: 1x (640x480), 1.5x (960x720) or 2x (1280x960)\n"
             "scale %s\n"
+            "# translucency: accurate (per pixel, as the Dreamcast) or fast (per triangle)\n"
+            "translucency %s\n"
             "# the port's captures for Claude (stick clicks): 1 on, 0 off; on costs speed\n"
             "capture %d\n"
             "# the port's own: sound volume in percent, the frame counter 1 on 0 off\n"
@@ -95,7 +105,8 @@ static void save_settings(void)
             "voices %s\n"
             "text %s\n",
             disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", 1,
-            nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_settings_capture, nx_volume, nx_overlay_on,
+            nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_translucency_fast ? "fast" : "accurate",
+            nx_settings_capture, nx_volume, nx_overlay_on,
             nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese");
     fclose(f);
     fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %s, capture %d, volume %d, counter %d, "
@@ -116,6 +127,7 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
     snprintf(lines[n++], 40, "WIDESCREEN      %s", port_toggles[1] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "60 FPS          %s", port_toggles[2] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "RESOLUTION      %s", scale_name(nx_halves));
+    snprintf(lines[n++], 40, "TRANSLUCENCY    %s", nx_translucency_fast ? "FAST" : "ACCURATE");
     snprintf(lines[n++], 40, "VOICES          %s", nx_voices_english ? "ENGLISH" : "JAPANESE");
     snprintf(lines[n++], 40, "TEXT            %s", nx_text_english ? "ENGLISH" : "JAPANESE");
     snprintf(lines[n++], 40, "VOLUME          %d%%", nx_volume);
@@ -134,6 +146,8 @@ const char *nx_menu_hint(void)
         return "2X MAY NOT HOLD 60 FPS";
     case ITEM_CAPTURE:
         return "NEXT START. ON COSTS SPEED";
+    case ITEM_TRANSLUCENCY:
+        return nx_translucency_fast ? "PER TRIANGLE: FASTER IN SMOKE" : "PER PIXEL, AS THE DREAMCAST";
     case ITEM_VOICES:
         return nx_english_has_voices() ? "CUTSCENE VOICES" : "NO ENGLISH FILES ON SD";
     case ITEM_TEXT:
@@ -158,6 +172,10 @@ static void change(int step)
     case ITEM_SIZE:
         // 1X, 1.5X, 2X, round
         nx_halves = 2 + (nx_halves - 2 + (step < 0 ? 2 : 1)) % 3;
+        break;
+    case ITEM_TRANSLUCENCY:
+        nx_translucency_fast = !nx_translucency_fast;
+        fprintf(stderr, "menu: translucency %s\n", nx_translucency_fast ? "fast" : "accurate");
         break;
     case ITEM_VOICES:
         nx_voices_english = !nx_voices_english;
