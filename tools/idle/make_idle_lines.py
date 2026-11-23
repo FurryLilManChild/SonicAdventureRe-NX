@@ -21,7 +21,7 @@ for line in open(os.path.join(here, '..', 'english', 'voice_map.txt')):
 table = json.load(open(os.path.join(here, 'sadx_idle_table.json')))
 # the line each character says anywhere it has none of its own (Sonic's own in stage 19)
 general = {0: 390, 2: 391, 3: 392, 5: 393, 6: 394, 7: 395}
-print('/* made by tools/idle/make_idle_lines.py from SADX\'s idle table (Japanese voice indices) */')
+print('/* made by tools/idle/make_idle_lines.py from the SADX idle table (Japanese voice indices) */')
 print('static const Sint16 idle_general[8] = {%s};' % ', '.join(
     str(inv[general[c]]) if c in general else '-1' for c in range(8)))
 print('#define IDLE_GENERAL_SONIC_19 %d' % inv[396])
