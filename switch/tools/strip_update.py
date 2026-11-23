@@ -222,11 +222,28 @@ def main():
                     best = j
             j = body.find(want, j + 1, hi)
             tries += 1
+        if best is None and n >= 8:
+            # moved further than that: anywhere in the image, the place nearest its guess
+            j = body.find(want)
+            tries = 0
+            while j >= 0 and tries < 4096:
+                if not any(covered[j:j + n]) and not any(j + q in rel_words for q in (0, n - 1)):
+                    if best is None or abs(j - guess) < abs(best - guess):
+                        best = j
+                j = body.find(want, j + 1)
+                tries += 1
         if best is None:
             dropped += 1
             continue
         take(best, c, s_at, n)
         near_moved += 1
+    # the content sections where a piece was not where its section puts it: matched again whole
+    # against their own disc file (step 2 below), as strip.py's first pass does
+    resections = set()
+    for at, c, s_at, n, want, guess in later:
+        key, off = old_find.find(old_start + at)
+        if key is not None and key[0] == 'S' and key[1].startswith('sa1_data_'):
+            resections.add(key[1])
         moved_bytes += n
     say(f'{moved} pieces in place again, {near_moved} found near their place, {dropped} not '
         f'({moved_bytes} bytes); first misses: {why}')
@@ -344,7 +361,7 @@ def main():
     # 2. what changed: content sections and data symbols that are new or differ, pointers aside
     changed_secs = changed_syms = new_bytes = 0
     for name, b in sorted(new_secdata.items()):
-        if name in old_secdata and masked(old_secdata[name]) == masked(b):
+        if name in old_secdata and masked(old_secdata[name]) == masked(b) and name not in resections:
             continue
         changed_secs += 1
         a, size = new_at[('S', name)]
