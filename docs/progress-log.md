@@ -2,6 +2,23 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-23: faster test and update builds
+
+- Builds: a build after a change recompiles only what changed (3.4 min, 128 files, timed). The
+  2,892-file builds earlier today were a one-time full recompile, not every build.
+- switch/tools/strip_update.py strips an update from the last strip's results, with no stub build:
+  the last fill's pieces placed again by the symbol they lay in (each checked against the disc;
+  pieces whose symbol moved are found near their place), new or changed data matched without a
+  stub twin, then strip.py's two whole-image scans, searched as audit.py searches (each disc
+  file's windows looked up among the image's, not the other way round). Against the 0.5.0 strip
+  with 351fe14's build: 2 min (strip.py: about 35, plus the 18-min stub build); 329,308 pieces;
+  audit 41 windows (0.5.0: 64); fill_check identical to the full image.
+- First try (no near search, no scans) left 636,348 windows: the audit caught it, which is why
+  make_release.sh stops when the audit finds more than the last strip left.
+- make_release.sh: SARE_STRIP update (default once out/strip-cache/ holds a last strip) or full;
+  the cache was seeded from release 0.5.0 (audit 64).
+- the owner (351fe14): TALK and the D-pad first-person look round work.
+
 ## 2026-11-23: idle lines from SADX's table, TALK back on, D-PAD LOOK (first-person view)
 
 - Idle lines: SADX (the owner's Steam sonic.exe) plays them in its idle check (CharObj2 IdleTime

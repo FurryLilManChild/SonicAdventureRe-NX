@@ -182,28 +182,54 @@ def main():
         pieces.append((at, src, s_at, n))
         covered[at:at + n] = b'\x01' * n
 
-    # 1. the last pieces, moved with their symbols, checked against the disc
-    moved = dropped = moved_bytes = 0
+    # 1. the last pieces, moved with their symbols, checked against the disc. A piece that is not
+    # where its symbol puts it (its symbol changed, or it lay in no symbol of its own) is looked
+    # for near there: its bytes, the closest place they are in the image, not yet taken
+    moved = near_moved = dropped = moved_bytes = 0
+    why = {}
+    later = []
     for at, src, s_at, n in last_pieces:
-        key, off = old_find.find(old_start + at)
-        if key is None or key not in new_at:
-            dropped += 1
-            continue
-        a, size = new_at[key]
-        if off + n > size:
-            dropped += 1
-            continue
-        na = a - start + off
         c = last_src[src]
         want = sources[c][1][s_at:s_at + n]
-        if na < 0 or na + n > len(body) or bytes(body[na:na + n]) != want or covered[na] or \
-                any(na + q in rel_words for q in (0, n - 1)):
+        key, off = old_find.find(old_start + at)
+        guess = None
+        if key is not None and key in new_at:
+            a, size = new_at[key]
+            guess = a - start + off
+            if off + n <= size and 0 <= guess and guess + n <= len(body) and \
+                    bytes(body[guess:guess + n]) == want and not any(covered[guess:guess + n]) and \
+                    not any(guess + q in rel_words for q in (0, n - 1)):
+                take(guess, c, s_at, n)
+                moved += 1
+                moved_bytes += n
+                continue
+            why['not where its place puts it'] = why.get('not where its place puts it', 0) + 1
+        else:
+            why['its place is gone'] = why.get('its place is gone', 0) + 1
+        later.append((at, c, s_at, n, want, guess))
+    for at, c, s_at, n, want, guess in later:
+        if guess is None:
+            # where the image around it moved: the shift of the nearest piece placed before it
+            guess = at
+        lo = max(0, guess - (1 << 21))
+        hi = min(len(body), guess + (1 << 21) + n)
+        best = None
+        j = body.find(want, lo, hi)
+        tries = 0
+        while j >= 0 and tries < 256:
+            if not any(covered[j:j + n]) and not any(j + q in rel_words for q in (0, n - 1)):
+                if best is None or abs(j - guess) < abs(best - guess):
+                    best = j
+            j = body.find(want, j + 1, hi)
+            tries += 1
+        if best is None:
             dropped += 1
             continue
-        take(na, c, s_at, n)
-        moved += 1
+        take(best, c, s_at, n)
+        near_moved += 1
         moved_bytes += n
-    say(f'{moved} pieces ({moved_bytes} bytes) in place again, {dropped} not')
+    say(f'{moved} pieces in place again, {near_moved} found near their place, {dropped} not '
+        f'({moved_bytes} bytes); first misses: {why}')
 
     ranges = map_ranges(new_map)
     rstarts = [r[0] for r in ranges]
@@ -340,6 +366,109 @@ def main():
         new_bytes += match_free(at0, size, cands)
     say(f'{changed_secs} content sections and {changed_syms} data symbols new or changed: '
         f'{new_bytes} more bytes from the disc')
+
+    # 3. (strip.py's 3 and 4) anything else the disc holds: each 16-byte window of the image (at
+    # 4-byte steps) not yet all taken, found in any image's file, grown byte by byte while it
+    # agrees. Searched as audit.py searches: each file's windows looked up among the image's
+    import numpy as np
+    from audit import hashes, W
+    for name in sorted(files):
+        source(name)
+
+    def not_taken(ok):
+        cov = np.frombuffer(bytes(covered), dtype=np.uint8)
+        n = len(ok)
+        full = np.ones(n, bool)
+        for k in range(W):
+            full &= cov[np.arange(n) * 4 + k] == 1
+        return ok & ~full
+
+    def disc_windows(img, mask):
+        """the windows of img under mask found in a disc file: (window, file, position) each"""
+        ih, ok = hashes(bytes(img), 4)
+        idx = np.nonzero(ok & mask[:len(ok)])[0]
+        hw = ih[idx]
+        order = np.argsort(hw)
+        sh = hw[order]
+        owner = np.full(len(sh), -1, np.int64)
+        where = np.zeros(len(sh), np.int64)
+        if not len(sh):
+            return []
+        for c in range(len(sources)):
+            d = sources[c][1]
+            if len(d) < W:
+                continue
+            hs, _ = hashes(d, 1)
+            pos = np.searchsorted(sh, hs)
+            pos[pos >= len(sh)] = len(sh) - 1
+            hit = np.nonzero(sh[pos] == hs)[0]
+            if not len(hit):
+                continue
+            p = pos[hit]
+            p, first = np.unique(p, return_index=True)
+            free = owner[p] < 0
+            owner[p[free]] = c
+            where[p[free]] = hit[first[free]]
+        # windows with the same hash as one found (searchsorted lands on the first of a run)
+        run = np.concatenate(([0], np.cumsum(sh[1:] != sh[:-1])))
+        lead = np.full(run[-1] + 1, -1, np.int64)
+        has = owner >= 0
+        lead[run[has]] = np.nonzero(has)[0]
+        got = lead[run]
+        sel = np.nonzero(got >= 0)[0]
+        return sorted(zip(idx[order[sel]].tolist(), owner[got[sel]].tolist(), where[got[sel]].tolist()))
+
+    _, ok0 = hashes(bytes(body), 4)
+    extra = 0
+    for w, c, j in disc_windows(body, not_taken(ok0)):
+        at = w * 4
+        if all(covered[at:at + W]):
+            continue
+        f = sources[c][1]
+        if bytes(body[at:at + W]) != f[j:j + W]:
+            continue  # a hash collision
+        b = 0
+        while at - b > 0 and j - b > 0 and body[at - b - 1] == f[j - b - 1] and not covered[at - b - 1]:
+            b += 1
+        n = W
+        while at + n < len(body) and j + n < len(f) and body[at + n] == f[j + n]:
+            n += 1
+        a0, j0, n0 = at - b, j - b, n + b
+        k = 0
+        while k < n0:
+            if covered[a0 + k] or a0 + k in rel_words:
+                k += 1
+                continue
+            e = k
+            while e < n0 and not covered[a0 + e] and a0 + e not in rel_words:
+                e += 1
+            take(a0 + k, c, j0 + k, e - k)
+            extra += e - k
+            k = e
+    say(f'{extra} more bytes found on the disc elsewhere in the image')
+
+    # 4. the same on the image as it now stands (taken bytes zeroed): short disc strings beside bytes
+    # already taken, whose windows only match the disc once those are zero
+    view = bytearray(body)
+    for at, src, s_at, n in pieces:
+        view[at:at + n] = bytes(n)
+    _, okv = hashes(bytes(view), 4)
+    more = 0
+    for w, c, j in disc_windows(view, not_taken(okv)):
+        d = sources[c][1]
+        at = w * 4
+        if bytes(view[at:at + W]) != d[j:j + W]:
+            continue
+        for k in range(W):
+            if not covered[at + k] and at + k not in rel_words and view[at + k]:
+                e = k
+                while e < W and not covered[at + e] and at + e not in rel_words:
+                    e += 1
+                take(at + k, c, j + k, e - k)
+                for q in range(k, e):
+                    view[at + q] = 0
+                more += e - k
+    say(f'{more} more bytes in short disc strings')
 
     # the stripped image, checked as strip.py checks it
     stripped = bytearray(body)
