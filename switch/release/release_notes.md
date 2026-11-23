@@ -22,7 +22,8 @@ rebuilds the game from them.
 
 - Atmosphere, and title takeover (hold R on a game): the Album is not enough.
 - Your Japanese Sonic Adventure dump (HDR-0001, v1.007) in `switch/SonicAdventureRe-nx/disc/`.
-- Optional, for English: your US dump in `switch/SonicAdventureRe-nx/us_disc/`.
+- Optional, for English: your US dump (MK-51000, the original release or Rev A, whose files
+  are identical) in `switch/SonicAdventureRe-nx/us_disc/`.
 - About 5 GB free on the SD card for the first launch.
 
 The port checks every file it uses from the Japanese disc and names any that don't match.

@@ -24,7 +24,8 @@ What you need
 - Your own dump of the Japanese Sonic Adventure disc (HDR-0001, version 1.007), as a .gdi with
   its track files or a Redump-style .cue with its .bin files. The decomp is built from this
   version; other versions are refused with a message saying which file differs.
-- Optional, for English: your own dump of the US Sonic Adventure disc, the same way.
+- Optional, for English: your own dump of the US Sonic Adventure disc (MK-51000), the same way.
+  The original release and Rev A both work: their files are identical.
 - About 5 GB free on the SD card for the first launch (the disc images plus their unpacked
   files). The images can be deleted afterwards.
 
