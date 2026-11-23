@@ -96,5 +96,10 @@ Z=out/release/SonicAdventureRe-nx-$V-switch.zip
 (cd out/release && rm -f "SonicAdventureRe-nx-$V-switch.zip" && zip -q -r -9 "SonicAdventureRe-nx-$V-switch.zip" switch)
 cp "$B/SonicAdventureRe-nx.full.elf" "out/release/release-$V.full.elf"
 cp "$B/loader.elf" "out/release/release-$V.loader.elf"
+# every packaged build's ELFs by commit, for its crash reports (out/release is made anew each time)
+c=$(git rev-parse --short HEAD)
+mkdir -p out/elfs
+cp "$B/SonicAdventureRe-nx.full.elf" "out/elfs/$c.full.elf"
+cp "$B/loader.elf" "out/elfs/$c.loader.elf"
 sha256sum "$Z" "$R/SonicAdventureRe-nx.nro" > out/release/sha256.txt
 cat out/release/sha256.txt
