@@ -2,6 +2,21 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-23: release 0.5.1
+
+- Built 034d683 with SARE_VERSION 0.5.1 and SARE_RELEASE 1 (2.5 min). The update strip from
+  fdd22c8's strip first left 51 audit windows (fdd22c8: 41): 1,511 pieces moved more than the
+  2 MB near search, 12 windows of them in sa1_data_b_egm1. Fixed (bbd0707): moved pieces are
+  looked for in the whole image, and each content section holding one is matched again against
+  its disc file (137 sections, 16.5 min this time; to be narrowed to the moved pieces alone).
+  Result: 330,313 pieces, audit 39 windows, fill_check identical.
+- History rewritten to take the owner's name out (his OK), main force-pushed; the 0.5.0 tag
+  could not be moved from the cloud (proxy 403), he moves it from his PC.
+- SonicAdventureRe-nx-0.5.1-switch.zip sha256
+  c2b3be75e3c4c1650a11fefc64ef6d44f8024a47057e578ed24792876f140b9d; NRO sha256
+  9e763136c775bb5f2930760af60a524f494645be7ea8be3cf14302dd4d032e07. In out\release\ with
+  release_notes_0.5.1.md. ELFs kept as out/elfs/034d683.*.
+
 ## 2026-11-23: faster test and update builds
 
 - Builds: a build after a change recompiles only what changed (3.4 min, 128 files, timed). The
