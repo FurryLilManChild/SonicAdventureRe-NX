@@ -1,0 +1,129 @@
+--- a/config/1st_read/imports.txt
++++ b/config/1st_read/imports.txt
+@@ -9,6 +9,7 @@
+ station_square_sky_step            adv00
+ station_square_place_player        adv00
+ station_square_people_place        adv00
++station_square_script_table        adv00
+ station_square_people_remove       adv00
+ station_square_land0               adv00
+ station_square_land0_texlist       adv00
+--- a/src/main.c
++++ b/src/main.c
+@@ -10,6 +10,7 @@
+ #include "draw/fade.h"
+ #include "draw/model.h"
+ #include "draw/text.h"
++#include "event/script.h"
+ #include "hud/hud.h"
+ #include "main.h"
+ #include "object/common.h"
+@@ -101,6 +102,11 @@
+         ADXT_ExecServer();
+         if (!card_notice_busy()) {
+             game_mode_step();
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++            if (game_mode == GAME_MODE_FIELD) {
++                script_native_talk();
++            }
++#endif
+         }
+         card_frame_update();
+         if (!card_saving) {
+--- a/src/event/script.c
++++ b/src/event/script.c
+@@ -5,6 +5,7 @@
+ #include <shinobi.h>
+ #include <sofdec.h>
+ 
++#include "adv00/people.h"
+ #include "al_garden00/garden.h"
+ #include "al_garden01/garden.h"
+ #include "al_garden02/garden.h"
+@@ -736,3 +737,38 @@
+         request->ready = TRUE;
+     }
+ }
++
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* Station Square's row of each character's voiced hints for its story so
++ * far (its hint box of them), which TALK plays in every field */
++#define TALK_ROW 18
++
++void script_native_talk(void)
++{
++    static struct script_pages pick;
++    const struct script_row *row;
++    int stage;
++    void *run;
++
++    if (!native_hook_talk()) {
++        return;
++    }
++    stage = STAGE_OF(stage_get_stage_act());
++    if (stage < STAGE_STATION_SQUARE || stage > STAGE_PAST ||
++        stage_paused() || event_in_control() || message_busy()) {
++        return;
++    }
++    row = &station_square_script_table[TALK_ROW];
++    pick.voice = -1;
++    pick.flag = -1;
++    pick.pages = NULL;
++    run = script_run(&pick, row->script, row->runs, RUNS_PAGES);
++    if (run == NULL) {
++        return;
++    }
++    pick.pages = run == NO_RUNS ? NULL : run;
++    if (pick.voice > -1 || pick.pages != NULL) {
++        script_show(&pick);
++    }
++}
++#endif
+--- a/src/event/script.h
++++ b/src/event/script.h
+@@ -95,4 +95,10 @@
+  * waiting for the window still shows */
+ void message_cut(void);
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* a host's TALK button, each step in a field: player 0 says the voiced hint
++ * for its story so far, as Station Square's hint box of them picks it */
++void script_native_talk(void);
++#endif
++
+ #endif
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -129,6 +129,11 @@
+     return NULL;
+ }
+ 
++int native_hook_talk(void)
++{
++    return 0;
++}
++
+ int native_hook_hint_parts(const char *text, const char **parts, int most)
+ {
+     (void)most;
+--- a/engine/native/prelude.h
++++ b/engine/native/prelude.h
+@@ -94,5 +94,7 @@
+  * gives the parts to show in its place, one after the other, at most most of
+  * them, and how many (1 with the page itself where it has none) */
+ int native_hook_hint_parts(const char *text, const char **parts, int most);
++/* a host's TALK button: native_hook_talk is 1 once for each press */
++int native_hook_talk(void);
+ 
+ #endif
+--- a/engine/native/native.h
++++ b/engine/native/native.h
+@@ -262,6 +262,8 @@
+  * gives the parts to show in its place, one after the other, at most most of
+  * them, and how many (1 with the page itself where it has none) */
+ int native_hook_hint_parts(const char *text, const char **parts, int most);
++/* a host's TALK button: native_hook_talk is 1 once for each press */
++int native_hook_talk(void);
+ int native_hook_voice_file(const char *archive, int fid, const void **data,
+                            size_t *size);
+ /* a disc file the game opens by name: native_hook_disc_file may give a host

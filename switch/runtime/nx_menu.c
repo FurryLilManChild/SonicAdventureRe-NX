@@ -38,6 +38,76 @@ int nx_resolution = 1;         // settings.txt's resolution (the decomp's, kept 
 int nx_halves = 2;             // the port's resolution in halves of 640x480: 2, 3 or 4 (1X to 2X)
 int nx_settings_capture;       // the captures setting for the next start
 int nx_translucency_fast;      // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster)
+volatile int nx_talk_request;  // set by the window when TALK is pressed, taken by the game's step
+
+// --- the controls: which Switch button presses each Dreamcast button, and TALK ---
+// (window_nx.cpp reads them each pad read; settings.txt keeps them as button_a b ... talk minus)
+enum { CTL_A, CTL_B, CTL_X, CTL_Y, CTL_L, CTL_R, CTL_TALK, CTLS };
+static const struct {
+    const char *name, *setting;
+    u64 mask;
+} sw_buttons[] = {
+    {"A", "a", HidNpadButton_A},
+    {"B", "b", HidNpadButton_B},
+    {"X", "x", HidNpadButton_X},
+    {"Y", "y", HidNpadButton_Y},
+    {"L", "l", HidNpadButton_L},
+    {"R", "r", HidNpadButton_R},
+    {"ZL", "zl", HidNpadButton_ZL},
+    {"ZR", "zr", HidNpadButton_ZR},
+    {"L + ZL", "l+zl", HidNpadButton_L | HidNpadButton_ZL},
+    {"R + ZR", "r+zr", HidNpadButton_R | HidNpadButton_ZR},
+    {"MINUS TAP", "minus", HidNpadButton_Minus}, // TALK only
+    {"NONE", "none", 0},                         // TALK only
+};
+#define SW_DC_CHOICES 10 // a Dreamcast button takes A to R + ZR
+#define SW_TALK_CHOICES 12
+static const char *const ctl_names[CTLS] = {"DREAMCAST A", "DREAMCAST B", "DREAMCAST X", "DREAMCAST Y",
+                                            "L TRIGGER",   "R TRIGGER",   "TALK"};
+static const char *const ctl_settings[CTLS] = {"button_a", "button_b", "button_x", "button_y",
+                                               "button_l", "button_r", "talk"};
+// the usual layout: B jumps (Dreamcast A), A acts (B), Y is X, X is Y, the shoulders turn the camera
+static const int ctl_defaults[CTLS] = {1, 0, 3, 2, 8, 9, 10};
+static int ctl_map[CTLS] = {1, 0, 3, 2, 8, 9, 10};
+
+// the Switch buttons pressing Dreamcast button i (CTL_A to CTL_R), or TALK's (Minus: a tap alone)
+u64 nx_control_mask(int i)
+{
+    return i >= 0 && i < CTLS ? sw_buttons[ctl_map[i]].mask : 0;
+}
+
+// a settings.txt line (nx_main.c): 1 where it was a control's
+int nx_control_setting(const char *name, const char *value)
+{
+    for (int i = 0; i < CTLS; i++)
+        if (!strcmp(name, ctl_settings[i])) {
+            int most = i == CTL_TALK ? SW_TALK_CHOICES : SW_DC_CHOICES;
+            for (int k = 0; k < most; k++)
+                if (!strcmp(value, sw_buttons[k].setting))
+                    ctl_map[i] = k;
+            return 1;
+        }
+    return 0;
+}
+
+// the controls as a log line
+void nx_controls_describe(char *out, size_t size)
+{
+    size_t n = 0;
+    out[0] = 0;
+    for (int i = 0; i < CTLS && n < size; i++)
+        n += snprintf(out + n, size - n, "%s%s %s", i ? ", " : "", ctl_settings[i], sw_buttons[ctl_map[i]].setting);
+}
+
+// the game asks each step in a field whether TALK was pressed (patch 0017)
+int __wrap_native_hook_talk(void)
+{
+    if (!nx_talk_request)
+        return 0;
+    nx_talk_request = 0;
+    fprintf(stderr, "talk: pressed in a field: the game picks the voiced hint\n");
+    return 1;
+}
 
 // the renderer asks each picture how its translucent triangles compose (patch 0016):
 // SA_PC_BLEND_PIXEL (0) or SA_PC_BLEND_TRIANGLE (3)
@@ -57,7 +127,14 @@ static const char *scale_name(int halves)
     return halves == 3 ? "1.5X" : halves == 4 ? "2X" : "1X";
 }
 
-enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
+enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_CONTROLS, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
+// the controls page's items: the controls, then DEFAULTS and BACK
+enum { PAGE_MAIN, PAGE_CONTROLS };
+#define CTL_DEFAULTS CTLS
+#define CTL_BACK (CTLS + 1)
+#define CTL_ITEMS (CTLS + 2)
+static int page;
+static int ctl_cursor;
 
 static int cursor;
 static int quit_armed;
@@ -103,11 +180,17 @@ static void save_settings(void)
             "counter %d\n"
             "# the English layer (english/, made from a US disc): english or japanese, each\n"
             "voices %s\n"
-            "text %s\n",
+            "text %s\n"
+            "# the controls (CONTROLS in the menu): the Switch button for each Dreamcast button,\n"
+            "# a b x y l r zl zr l+zl r+zr; talk also minus (a tap alone) or none\n"
+            "button_a %s\nbutton_b %s\nbutton_x %s\nbutton_y %s\nbutton_l %s\nbutton_r %s\ntalk %s\n",
             disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", 1,
             nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_translucency_fast ? "fast" : "accurate",
             nx_settings_capture, nx_volume, nx_overlay_on,
-            nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese");
+            nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese",
+            sw_buttons[ctl_map[0]].setting, sw_buttons[ctl_map[1]].setting, sw_buttons[ctl_map[2]].setting,
+            sw_buttons[ctl_map[3]].setting, sw_buttons[ctl_map[4]].setting, sw_buttons[ctl_map[5]].setting,
+            sw_buttons[ctl_map[6]].setting);
     fclose(f);
     fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %s, capture %d, volume %d, counter %d, "
                     "voices %s, text %s\n",
@@ -119,8 +202,18 @@ static void save_settings(void)
 int nx_menu_lines(char lines[][40], int most, int *selected)
 {
     int n = 0;
-    if (most < ITEMS + 2)
+    if (most < ITEMS + 2 || most < CTL_ITEMS + 2)
         return 0;
+    if (page == PAGE_CONTROLS) {
+        snprintf(lines[n++], 40, "CONTROLS");
+        snprintf(lines[n++], 40, " ");
+        for (int i = 0; i < CTLS; i++)
+            snprintf(lines[n++], 40, "%-15s %s", ctl_names[i], sw_buttons[ctl_map[i]].name);
+        snprintf(lines[n++], 40, "DEFAULTS");
+        snprintf(lines[n++], 40, "BACK");
+        *selected = 2 + ctl_cursor;
+        return n;
+    }
     snprintf(lines[n++], 40, "SONICADVENTURERE-NX");
     snprintf(lines[n++], 40, " ");
     snprintf(lines[n++], 40, "RESUME");
@@ -130,6 +223,7 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
     snprintf(lines[n++], 40, "TRANSLUCENCY    %s", nx_translucency_fast ? "FAST" : "ACCURATE");
     snprintf(lines[n++], 40, "VOICES          %s", nx_voices_english ? "ENGLISH" : "JAPANESE");
     snprintf(lines[n++], 40, "TEXT            %s", nx_text_english ? "ENGLISH" : "JAPANESE");
+    snprintf(lines[n++], 40, "CONTROLS");
     snprintf(lines[n++], 40, "VOLUME          %d%%", nx_volume);
     snprintf(lines[n++], 40, "FPS COUNTER     %s", nx_overlay_on ? "ON" : "OFF");
     snprintf(lines[n++], 40, "CAPTURES        %s", nx_settings_capture ? "ON" : "OFF");
@@ -141,7 +235,18 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
 // a hint under the menu: what the choice under the cursor does
 const char *nx_menu_hint(void)
 {
+    if (page == PAGE_CONTROLS) {
+        if (ctl_cursor == CTL_TALK)
+            return "SAYS WHAT TO DO, IN FIELDS";
+        if (ctl_cursor < CTLS)
+            return "LEFT OR RIGHT CHANGES IT";
+        if (ctl_cursor == CTL_DEFAULTS)
+            return "A PUTS BACK THE USUAL LAYOUT";
+        return "B GOES BACK";
+    }
     switch (cursor) {
+    case ITEM_CONTROLS:
+        return "REMAP BUTTONS, TALK";
     case ITEM_SIZE:
         return "2X MAY NOT HOLD 60 FPS";
     case ITEM_CAPTURE:
@@ -155,6 +260,24 @@ const char *nx_menu_hint(void)
     default:
         return "B OR + RESUMES";
     }
+}
+
+static void control_change(int step)
+{
+    if (ctl_cursor == CTL_DEFAULTS) {
+        if (step > 0)
+            for (int i = 0; i < CTLS; i++)
+                ctl_map[i] = ctl_defaults[i];
+    } else if (ctl_cursor < CTLS) {
+        int most = ctl_cursor == CTL_TALK ? SW_TALK_CHOICES : SW_DC_CHOICES;
+        ctl_map[ctl_cursor] = (ctl_map[ctl_cursor] + (step < 0 ? most - 1 : 1)) % most;
+    } else {
+        return;
+    }
+    char line[200];
+    nx_controls_describe(line, sizeof line);
+    fprintf(stderr, "menu: controls: %s\n", line);
+    save_settings();
 }
 
 static void change(int step)
@@ -211,6 +334,7 @@ int native_menu_step(void)
         nx_menu_request = 0;
         nx_menu_open = 1;
         cursor = ITEM_RESUME;
+        page = PAGE_MAIN;
         quit_armed = 0;
         fprintf(stderr, "menu: open (the game waits)\n");
         return 1;
@@ -222,6 +346,28 @@ int native_menu_step(void)
         nx_menu_quit = 1;
         fprintf(stderr, "menu: closed, the system ends the program\n");
         return 0;
+    }
+    if (page == PAGE_CONTROLS) {
+        // B or BACK returns to the main page; + resumes the game
+        if (down & HidNpadButton_Plus) {
+            page = PAGE_MAIN;
+            nx_menu_open = 0;
+            fprintf(stderr, "menu: closed, the game goes on\n");
+            return 0;
+        }
+        if ((down & HidNpadButton_B) || ((down & HidNpadButton_A) && ctl_cursor == CTL_BACK)) {
+            page = PAGE_MAIN;
+            return 1;
+        }
+        if (down & HidNpadButton_AnyUp)
+            ctl_cursor = (ctl_cursor + CTL_ITEMS - 1) % CTL_ITEMS;
+        if (down & HidNpadButton_AnyDown)
+            ctl_cursor = (ctl_cursor + 1) % CTL_ITEMS;
+        if (down & HidNpadButton_AnyLeft)
+            control_change(-1);
+        if (down & (HidNpadButton_AnyRight | HidNpadButton_A))
+            control_change(1);
+        return 1;
     }
     if (down & (HidNpadButton_B | HidNpadButton_Plus)) {
         nx_menu_open = 0;
@@ -245,6 +391,11 @@ int native_menu_step(void)
             nx_menu_open = 0;
             fprintf(stderr, "menu: closed, the game goes on\n");
             return 0;
+        }
+        if (cursor == ITEM_CONTROLS) {
+            page = PAGE_CONTROLS;
+            ctl_cursor = 0;
+            return 1;
         }
         if (cursor == ITEM_QUIT) {
             if (quit_armed) {

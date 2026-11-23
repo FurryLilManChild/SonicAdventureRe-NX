@@ -2,6 +2,27 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-23: CONTROLS (button remapping) and TALK
+
+- A community request: the characters' voiced "where am I, what now" lines on a button, as a PC
+  mod does for SADX (Idle Chatter, Z). In the decomp (JP 1.007) these are Station Square's row 18
+  (hint_script_18: 31 voiced branches over all six characters, picked by story flags), shown by a
+  hint box; no field has another such row, and no idle timer turned up in a search of the decomp.
+- Patch 0017: script_native_talk (script.c), called from main's loop in GAME_MODE_FIELD, runs row
+  18 of station_square_script_table (exported to 1st_read through config/1st_read/imports.txt)
+  when the weak native_hook_talk says TALK was pressed, in stages Station Square to the Past, not
+  paused, no event in control, no message busy; script_show plays the voice and pages.
+- Port: nx_menu.c's CONTROLS page (the Switch button for Dreamcast A, B, X, Y, L, R: A to R + ZR;
+  TALK also MINUS TAP or NONE; DEFAULTS; BACK), live, saved as button_a ... talk; window_nx.cpp
+  reads the map in window_pad and raises TALK in window_pump (Minus let go with no + meanwhile).
+  Defaults are the old fixed layout. The start log lists the controls; menu changes and each
+  TALK press are logged.
+- English for those lines: make_maps.py now also reads a module's people/text.inc and accepts
+  Japanese pages without a leading tab or bell, and picks only US pages that have English. 52 new
+  hint rows (46 Station Square: the 16 story hints, hint boxes, signs; 6 Mystic Ruins), every one
+  checked by eye; the old 121 rows unchanged. english_build.c output still equals
+  make_english.py's (173 hints).
+
 ## 2026-11-22: release 0.5.0 (needs testing)
 
 - the owner (build e62c854, clean SD folder with only his two disc images): it worked, first launch

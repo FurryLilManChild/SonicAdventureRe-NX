@@ -57,6 +57,9 @@ Press Minus and Plus together in the game.
   did; FAST sorts them per triangle and is quicker where smoke, dust and fog pile up, with
   small mistakes possible where two see-through surfaces cross. It changes at once.
 - VOICES and TEXT: English or Japanese, each on its own (English needs the US disc).
+- CONTROLS: which Switch button presses each Dreamcast button (A, B, X, Y and the two
+  triggers), and the TALK button; DEFAULTS puts back the usual layout. The menu itself always
+  uses A, B and Minus + Plus.
 - VOLUME, FPS COUNTER, CAPTURES (pictures for bug reports on stick clicks; costs speed).
 - QUIT GAME.
 Settings are saved in settings.txt.
@@ -70,7 +73,8 @@ disc. What is in English:
 - Character voices during play: all 94 sound banks in the 17 voice files.
 - Menus, HUD, mission cards, tutorials and other on-screen pictures with text: 805 of 834.
 - Town and field messages (Station Square, Mystic Ruins, the Past).
-- Tikal's hints: 121 pages, in Mystic Ruins and the action stages (except Hot Shelter).
+- Tikal's hints: in Mystic Ruins and the action stages (except Hot Shelter); Station Square's
+  hint boxes, signs and characters' story hints (173 hint pages in all).
 
 Not yet in English:
 - 83 cutscene subtitles, where the English script splits the lines differently.
@@ -81,6 +85,12 @@ Not yet in English:
 - The opening title screen stays Japanese on purpose (it reads Sonic Adventure).
 - Text built into the game's program rather than its data files (for example the memory card
   messages) has not been checked and may still be Japanese.
+
+## TALK
+
+Each character has voiced lines about where they are and what to do next, picked by how far
+their story has gone. Tap Minus (on its own) in Station Square, Mystic Ruins, the Egg Carrier or
+the Past to hear the one for now, with its subtitle. CONTROLS can move TALK to another button.
 
 ## Known issues
 - Where smoke, dust or fog fill the screen, the frame rate can drop a lot with TRANSLUCENCY

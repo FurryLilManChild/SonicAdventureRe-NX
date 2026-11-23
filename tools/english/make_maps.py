@@ -74,14 +74,19 @@ def hints(gen_modules, us_modules, out):
     bare = lambda t: bytes(b for b in t if b not in (7, 9, 10))
     rows, total = [], 0
     for mod in sorted(os.listdir(gen_modules)):
-        inc = os.path.join(gen_modules, mod, 'scripts', 'text.inc')
+        # the stages' scripts, and Station Square's people (its hint boxes' rows)
+        incs = [os.path.join(gen_modules, mod, d, 'text.inc') for d in ('scripts', 'people')]
+        incs = [i for i in incs if os.path.exists(i)]
         us = os.path.join(us_modules, mod.upper() + '.bin')
-        if not os.path.exists(inc) or not os.path.exists(us):
+        if not incs or not os.path.exists(us):
             continue
         blocks = common.hint_blocks(open(us, 'rb').read())
-        pages = [(b, r, p, t) for b, (J, _) in enumerate(blocks) for r, run in enumerate(J) for p, t in enumerate(run[1])]
-        for t in texts(inc).values():
-            if not common.is_japanese(t):
+        # only pages that have English (a better match without any would hide one with it)
+        pages = [(b, r, p, t) for b, (J, _) in enumerate(blocks) for r, run in enumerate(J) for p, t in enumerate(run[1])
+                 if common.hint_english(blocks, b, r, p)]
+        for t in [t for inc in incs for t in texts(inc).values()]:
+            # Japanese: mostly Shift JIS (a page may start without the tab or bell is_japanese wants)
+            if len(t) <= 4 or sum(1 for b in t if b >= 0x81) <= len(t) // 3:
                 continue
             total += 1
             best = max(pages, key=lambda c: difflib.SequenceMatcher(None, bare(t), bare(c[3])).ratio(), default=None)

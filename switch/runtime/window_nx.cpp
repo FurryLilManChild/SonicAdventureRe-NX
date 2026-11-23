@@ -32,6 +32,10 @@ extern "C" volatile int nx_capture_request;
 extern "C" int nx_capture_enabled;
 // the port menu (nx_menu.c)
 extern "C" volatile int nx_menu_open, nx_menu_request, nx_menu_quit;
+// the controls (nx_menu.c): the Switch buttons for each Dreamcast button (0 A, 1 B, 2 X, 3 Y, 4 L, 5 R)
+// and TALK's (6; Minus means a tap of Minus alone)
+extern "C" u64 nx_control_mask(int i);
+extern "C" volatile int nx_talk_request;
 extern "C" int nx_volume;
 // the pause trace (nx_trace.c): newly pressed Start as the window reports it
 extern "C" void nx_trace_start_pressed(unsigned long read, uint32_t held, uint32_t press);
@@ -226,6 +230,26 @@ bool window_pump(Window *window)
         fprintf(stderr, "nx: Minus and + held: the port menu opens\n");
         nx_menu_request = 1;
     }
+    // TALK: on Minus, a tap of Minus alone (let go with no + pressed meanwhile); else a press
+    static bool minus_down, minus_chord;
+    const u64 talk = nx_control_mask(6);
+    if (nx_menu_open || nx_menu_request) {
+        minus_down = false;
+    } else if (talk == HidNpadButton_Minus) {
+        if (held & HidNpadButton_Minus) {
+            if (!minus_down)
+                minus_chord = false;
+            minus_down = true;
+            if (held & HidNpadButton_Plus)
+                minus_chord = true;
+        } else if (minus_down) {
+            minus_down = false;
+            if (!minus_chord)
+                nx_talk_request = 1;
+        }
+    } else if (talk && (down & talk)) {
+        nx_talk_request = 1;
+    }
     return false;
 }
 
@@ -273,10 +297,11 @@ sa_result window_pad(Window *window, uint32_t port, sa_pad &pad)
             start_swallowed = false;
     }
     uint32_t held = 0;
-    held |= (b & HidNpadButton_B) ? PAD_A : 0;
-    held |= (b & HidNpadButton_A) ? PAD_B : 0;
-    held |= (b & HidNpadButton_Y) ? PAD_X : 0;
-    held |= (b & HidNpadButton_X) ? PAD_Y : 0;
+    // the Dreamcast's buttons as the controls map them (CONTROLS in the port menu)
+    held |= (b & nx_control_mask(0)) ? PAD_A : 0;
+    held |= (b & nx_control_mask(1)) ? PAD_B : 0;
+    held |= (b & nx_control_mask(2)) ? PAD_X : 0;
+    held |= (b & nx_control_mask(3)) ? PAD_Y : 0;
     held |= (b & HidNpadButton_Plus) ? PAD_START : 0;
     held |= (b & HidNpadButton_Up) ? PAD_UP : 0;
     held |= (b & HidNpadButton_Down) ? PAD_DOWN : 0;
@@ -297,8 +322,8 @@ sa_result window_pad(Window *window, uint32_t port, sa_pad &pad)
     if (held & (PAD_UP | PAD_DOWN))
         pad.y1 = held & PAD_UP ? -128 : 127;
 
-    const bool left = b & (HidNpadButton_ZL | HidNpadButton_L);
-    const bool right = b & (HidNpadButton_ZR | HidNpadButton_R);
+    const bool left = b & nx_control_mask(4);
+    const bool right = b & nx_control_mask(5);
     pad.l = left ? 255 : 0;
     pad.r = right ? 255 : 0;
     held |= left ? PAD_TL : 0;
