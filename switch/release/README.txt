@@ -1,4 +1,4 @@
-SonicAdventureRe-nx 0.5.0 (needs testing)
+SonicAdventureRe-nx 0.5.1 (needs testing)
 ==========================================
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
@@ -10,7 +10,7 @@ rebuilds the game from your own disc dumps the first time it starts.
 
 Status
 ------
-0.5.0 means feature-ready but not yet played through from start to finish. Please play, and
+0.5.x means feature-ready but not yet played through from start to finish. Please play, and
 report what goes wrong (see Reporting problems).
 
 - Widescreen (16:9) and 60 fps by default, at the Switch's stock clocks.
@@ -38,6 +38,14 @@ Install
    sdmc:/switch/SonicAdventureRe-nx/us_disc/
 4. Launch through title takeover: hold R while opening any game, then pick
    SonicAdventureRe-nx in the Homebrew Menu. The Album does not give it enough memory.
+
+Updating from 0.5.0
+-------------------
+1. Copy the "switch" folder from this zip to the root of your SD card, replacing the files
+   already there. Keep disc/, us_disc/, english/, settings.txt and card.bin as they are.
+2. Launch. The first launch rebuilds the game from your unpacked disc (a short "building the
+   game from your disc" screen); it does not unpack the discs or make the english folder again.
+   Later launches start straight away.
 
 First launch
 ------------

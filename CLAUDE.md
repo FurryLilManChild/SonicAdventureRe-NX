@@ -3,13 +3,13 @@
 Native Nintendo Switch port of **Sonic Adventure** (Dreamcast, Japanese release HDR-0001 v1.007)
 built on [reshaped/sonic-adventure](https://github.com/reshaped/sonic-adventure), a complete
 matching decompilation with a native PC game. Separate from SA-nx (the dream-recomp port, PAL and US
-discs), which stays as it is. Owner: the owner (GitHub FurryLilManChild). Load the `switch-port-base`
+discs), which stays as it is. Owner: FurryLilManChild. Load the `switch-port-base`
 skill before working here.
 
 ## Who does what
 
 - Claude writes all code, scripts and configs, reads logs, and commits.
-- the owner runs builds on his Windows PC when asked, tests on his PC and Switch, and moves Switch builds
+- The owner runs builds on his Windows PC when asked, tests on his PC and Switch, and moves Switch builds
   to the SD card himself. He writes no code.
 - Naming: everything is named after the project, SonicAdventureRe-nx (never a short form like
   "sonicadvre", which could be Adventure or Advance). The SD card folder is
