@@ -62,8 +62,13 @@ Press Minus and Plus together in the game.
   small mistakes possible where two see-through surfaces cross. It changes at once.
 - VOICES and TEXT: English or Japanese, each on its own (English needs the US disc).
 - CONTROLS: which Switch button presses each Dreamcast button (A, B, X, Y and the two
-  triggers); DEFAULTS puts back the usual layout. The menu itself always
-  uses A, B and Minus + Plus.
+  triggers), and:
+  - TALK (a tap of Minus by default): the character says its idle line for where it is.
+  - D-PAD: LOOK (the default, as on the Dreamcast): stand still and press the D-pad to look
+    round in first person; a face button or the stick ends it. MOVE: the D-pad walks.
+  - IDLE LINES: ON (the default): a character left standing for about 30 seconds says its
+    line, as in Sonic Adventure DX.
+  DEFAULTS puts back the usual layout. The menu itself always uses A, B and Minus + Plus.
 - VOLUME, FPS COUNTER, CAPTURES (pictures for bug reports on stick clicks; costs speed).
 - QUIT GAME.
 Settings are saved in settings.txt.

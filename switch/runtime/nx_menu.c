@@ -39,6 +39,8 @@ int nx_halves = 2;             // the port's resolution in halves of 640x480: 2,
 int nx_settings_capture;       // the captures setting for the next start
 int nx_translucency_fast;      // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster)
 volatile int nx_talk_request;  // set by the window when TALK is pressed, taken by the game's step
+int nx_dpad_move;              // 0: the D-pad is its own, as on the Dreamcast (first-person look); 1: it walks
+int nx_idle_lines = 1;         // 1: a character standing still says its idle line as it fidgets, as in SADX
 
 // --- the controls: which Switch button presses each Dreamcast button, and TALK ---
 // (window_nx.cpp reads them each pad read; settings.txt keeps them as button_a b ... talk minus)
@@ -99,16 +101,19 @@ void nx_controls_describe(char *out, size_t size)
         n += snprintf(out + n, size - n, "%s%s %s", i ? ", " : "", ctl_settings[i], sw_buttons[ctl_map[i]].setting);
 }
 
-// the game asks each step in a field whether TALK was pressed (patch 0017)
-// TALK is off until the characters' own idle lines are found: Station Square's row 18 turned out
-// to be Tikal's voiced story hints, not the characters' (the owner's test of 7bc647f)
-#define TALK_READY 0
+// the game asks each step whether TALK was pressed, and whether idle lines play (patch 0017): the
+// characters' idle lines, from SADX's table (tools/idle)
 int __wrap_native_hook_talk(void)
 {
     if (!nx_talk_request)
         return 0;
     nx_talk_request = 0;
-    return TALK_READY;
+    return 1;
+}
+
+int __wrap_native_hook_idle_lines(void)
+{
+    return nx_idle_lines;
 }
 
 // the renderer asks each picture how its translucent triangles compose (patch 0016):
@@ -132,11 +137,13 @@ static const char *scale_name(int halves)
 enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_CONTROLS, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
 // the controls page's items: the controls, then DEFAULTS and BACK
 enum { PAGE_MAIN, PAGE_CONTROLS };
-// the page's rows: the six Dreamcast buttons (TALK hidden while TALK_READY is 0), DEFAULTS, BACK
-#define CTL_SHOWN (TALK_READY ? CTLS : CTL_TALK)
-#define CTL_DEFAULTS CTL_SHOWN
-#define CTL_BACK (CTL_SHOWN + 1)
-#define CTL_ITEMS (CTL_SHOWN + 2)
+// the page's rows: the six Dreamcast buttons, TALK, D-PAD, IDLE LINES, DEFAULTS, BACK
+#define CTL_SHOWN CTLS
+#define CTL_DPAD CTLS
+#define CTL_IDLE (CTLS + 1)
+#define CTL_DEFAULTS (CTLS + 2)
+#define CTL_BACK (CTLS + 3)
+#define CTL_ITEMS (CTLS + 4)
 static int page;
 static int ctl_cursor;
 
@@ -187,14 +194,19 @@ static void save_settings(void)
             "text %s\n"
             "# the controls (CONTROLS in the menu): the Switch button for each Dreamcast button,\n"
             "# a b x y l r zl zr l+zl r+zr; talk also minus (a tap alone) or none\n"
-            "button_a %s\nbutton_b %s\nbutton_x %s\nbutton_y %s\nbutton_l %s\nbutton_r %s\ntalk %s\n",
+            "button_a %s\nbutton_b %s\nbutton_x %s\nbutton_y %s\nbutton_l %s\nbutton_r %s\ntalk %s\n"
+            "# the D-pad: look (its own, as on the Dreamcast: standing still it looks round in first\n"
+            "# person) or move (it walks, like the stick)\n"
+            "dpad %s\n"
+            "# a character standing still says its idle line as it fidgets: 1 on, 0 off\n"
+            "idle_lines %d\n",
             disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", 1,
             nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_translucency_fast ? "fast" : "accurate",
             nx_settings_capture, nx_volume, nx_overlay_on,
             nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese",
             sw_buttons[ctl_map[0]].setting, sw_buttons[ctl_map[1]].setting, sw_buttons[ctl_map[2]].setting,
             sw_buttons[ctl_map[3]].setting, sw_buttons[ctl_map[4]].setting, sw_buttons[ctl_map[5]].setting,
-            sw_buttons[ctl_map[6]].setting);
+            sw_buttons[ctl_map[6]].setting, nx_dpad_move ? "move" : "look", nx_idle_lines);
     fclose(f);
     fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %s, capture %d, volume %d, counter %d, "
                     "voices %s, text %s\n",
@@ -213,6 +225,8 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
         snprintf(lines[n++], 40, " ");
         for (int i = 0; i < CTL_SHOWN; i++)
             snprintf(lines[n++], 40, "%-15s %s", ctl_names[i], sw_buttons[ctl_map[i]].name);
+        snprintf(lines[n++], 40, "%-15s %s", "D-PAD", nx_dpad_move ? "MOVE" : "LOOK");
+        snprintf(lines[n++], 40, "%-15s %s", "IDLE LINES", nx_idle_lines ? "ON" : "OFF");
         snprintf(lines[n++], 40, "DEFAULTS");
         snprintf(lines[n++], 40, "BACK");
         *selected = 2 + ctl_cursor;
@@ -240,8 +254,12 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
 const char *nx_menu_hint(void)
 {
     if (page == PAGE_CONTROLS) {
-        if (ctl_cursor == CTL_TALK && TALK_READY)
-            return "SAYS WHAT TO DO, IN FIELDS";
+        if (ctl_cursor == CTL_TALK)
+            return "THE CHARACTER'S LINE FOR HERE";
+        if (ctl_cursor == CTL_DPAD)
+            return nx_dpad_move ? "WALKS, LIKE THE STICK" : "STAND STILL: FIRST-PERSON LOOK";
+        if (ctl_cursor == CTL_IDLE)
+            return "A LINE AFTER 30 S STANDING STILL";
         if (ctl_cursor < CTL_SHOWN)
             return "LEFT OR RIGHT CHANGES IT";
         if (ctl_cursor == CTL_DEFAULTS)
@@ -269,9 +287,16 @@ const char *nx_menu_hint(void)
 static void control_change(int step)
 {
     if (ctl_cursor == CTL_DEFAULTS) {
-        if (step > 0)
+        if (step > 0) {
             for (int i = 0; i < CTLS; i++)
                 ctl_map[i] = ctl_defaults[i];
+            nx_dpad_move = 0;
+            nx_idle_lines = 1;
+        }
+    } else if (ctl_cursor == CTL_DPAD) {
+        nx_dpad_move = !nx_dpad_move;
+    } else if (ctl_cursor == CTL_IDLE) {
+        nx_idle_lines = !nx_idle_lines;
     } else if (ctl_cursor < CTL_SHOWN) {
         int most = ctl_cursor == CTL_TALK ? SW_TALK_CHOICES : SW_DC_CHOICES;
         ctl_map[ctl_cursor] = (ctl_map[ctl_cursor] + (step < 0 ? most - 1 : 1)) % most;
@@ -280,7 +305,8 @@ static void control_change(int step)
     }
     char line[200];
     nx_controls_describe(line, sizeof line);
-    fprintf(stderr, "menu: controls: %s\n", line);
+    fprintf(stderr, "menu: controls: %s, dpad %s, idle_lines %d\n", line, nx_dpad_move ? "move" : "look",
+            nx_idle_lines);
     save_settings();
 }
 

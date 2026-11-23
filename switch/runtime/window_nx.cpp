@@ -36,6 +36,7 @@ extern "C" volatile int nx_menu_open, nx_menu_request, nx_menu_quit;
 // and TALK's (6; Minus means a tap of Minus alone)
 extern "C" u64 nx_control_mask(int i);
 extern "C" volatile int nx_talk_request;
+extern "C" int nx_dpad_move;
 extern "C" int nx_volume;
 // the pause trace (nx_trace.c): newly pressed Start as the window reports it
 extern "C" void nx_trace_start_pressed(unsigned long read, uint32_t held, uint32_t press);
@@ -317,10 +318,15 @@ sa_result window_pad(Window *window, uint32_t port, sa_pad &pad)
     pad.y1 = dc_axis(stick_axis(ly, lx, 0.0f, true));
     pad.x2 = dc_axis(stick_axis(rx, ry, 0.0f, true));
     pad.y2 = dc_axis(stick_axis(ry, rx, 0.0f, true));
-    if (held & (PAD_LEFT | PAD_RIGHT))
-        pad.x1 = held & PAD_LEFT ? -128 : 127;
-    if (held & (PAD_UP | PAD_DOWN))
-        pad.y1 = held & PAD_UP ? -128 : 127;
+    // D-PAD MOVE: the D-pad walks, like the stick (the decomp's PC backend does this). LOOK, the
+    // default: it stays its own, as on the Dreamcast, so standing still it starts the first-person
+    // look round (the camera's SURVEY mode), which the stick's moving would end at once
+    if (nx_dpad_move) {
+        if (held & (PAD_LEFT | PAD_RIGHT))
+            pad.x1 = held & PAD_LEFT ? -128 : 127;
+        if (held & (PAD_UP | PAD_DOWN))
+            pad.y1 = held & PAD_UP ? -128 : 127;
+    }
 
     const bool left = b & nx_control_mask(4);
     const bool right = b & nx_control_mask(5);

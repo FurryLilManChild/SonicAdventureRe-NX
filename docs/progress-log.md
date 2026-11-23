@@ -2,6 +2,29 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-23: idle lines from SADX's table, TALK back on, D-PAD LOOK (first-person view)
+
+- Idle lines: SADX (the owner's Steam sonic.exe) plays them in its idle check (CharObj2 IdleTime
+  0x708, then 0x442360): half the time the character's general line (US 390 to 395, Sonic 396 in
+  Perfect Chaos), else its own line for the stage from the table at 0x915CC8 (by act, random in
+  the Chao gardens), the general line where it has none. The table is in
+  tools/idle/sadx_idle_table.json (numbers only); tools/idle/make_idle_lines.py turns each US
+  voice into the Japanese EVENT_ADX index through tools/english/voice_map.txt read backwards (all
+  162 have one; US 316 has two Japanese clips of the same length, 321 and 322, ADX sample counts
+  44128 each; 321 used). VOICES English swaps in the US clip through the usual voice hook.
+- Patch 0017 reworked: script_native_talk(playing) runs each step in ACTION, FIELD and TRIAL; it
+  plays the line when player 0's idle_steps drops from over 1800 (the six characters'
+  FIDGET_STEPS: the fidget starts) while native_hook_idle_lines is on, or on TALK. Not while
+  paused, in an event, or while a message or voice plays (message_busy). The Station Square
+  script-table import is gone.
+- Port menu, CONTROLS page: TALK shown again, D-PAD (LOOK default, MOVE) and IDLE LINES (ON
+  default); settings dpad and idle_lines.
+- First-person view: the decomp has it, camera mode SURVEY (64, "the pad's look round",
+  camera.c camera_start_or_end_survey): the D-pad starts it while player 0 stands still on land,
+  a face button, the stick or moving ends it. The decomp's PC backend and our window_nx.cpp both
+  copied the D-pad onto the stick (x1, y1), so Up walked forward and the survey could never
+  start. D-PAD LOOK leaves the stick alone, as on the Dreamcast. Not yet tested on the Switch.
+
 ## 2026-11-23: TALK off until the characters' idle lines are found
 
 - the owner (7bc647f): TALK in Station Square played Tikal's voice, not the character's. Row 18 is
