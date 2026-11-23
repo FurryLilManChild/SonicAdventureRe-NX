@@ -100,13 +100,15 @@ void nx_controls_describe(char *out, size_t size)
 }
 
 // the game asks each step in a field whether TALK was pressed (patch 0017)
+// TALK is off until the characters' own idle lines are found: Station Square's row 18 turned out
+// to be Tikal's voiced story hints, not the characters' (the owner's test of 7bc647f)
+#define TALK_READY 0
 int __wrap_native_hook_talk(void)
 {
     if (!nx_talk_request)
         return 0;
     nx_talk_request = 0;
-    fprintf(stderr, "talk: pressed in a field: the game picks the voiced hint\n");
-    return 1;
+    return TALK_READY;
 }
 
 // the renderer asks each picture how its translucent triangles compose (patch 0016):
@@ -130,9 +132,11 @@ static const char *scale_name(int halves)
 enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_CONTROLS, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
 // the controls page's items: the controls, then DEFAULTS and BACK
 enum { PAGE_MAIN, PAGE_CONTROLS };
-#define CTL_DEFAULTS CTLS
-#define CTL_BACK (CTLS + 1)
-#define CTL_ITEMS (CTLS + 2)
+// the page's rows: the six Dreamcast buttons (TALK hidden while TALK_READY is 0), DEFAULTS, BACK
+#define CTL_SHOWN (TALK_READY ? CTLS : CTL_TALK)
+#define CTL_DEFAULTS CTL_SHOWN
+#define CTL_BACK (CTL_SHOWN + 1)
+#define CTL_ITEMS (CTL_SHOWN + 2)
 static int page;
 static int ctl_cursor;
 
@@ -207,7 +211,7 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
     if (page == PAGE_CONTROLS) {
         snprintf(lines[n++], 40, "CONTROLS");
         snprintf(lines[n++], 40, " ");
-        for (int i = 0; i < CTLS; i++)
+        for (int i = 0; i < CTL_SHOWN; i++)
             snprintf(lines[n++], 40, "%-15s %s", ctl_names[i], sw_buttons[ctl_map[i]].name);
         snprintf(lines[n++], 40, "DEFAULTS");
         snprintf(lines[n++], 40, "BACK");
@@ -236,9 +240,9 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
 const char *nx_menu_hint(void)
 {
     if (page == PAGE_CONTROLS) {
-        if (ctl_cursor == CTL_TALK)
+        if (ctl_cursor == CTL_TALK && TALK_READY)
             return "SAYS WHAT TO DO, IN FIELDS";
-        if (ctl_cursor < CTLS)
+        if (ctl_cursor < CTL_SHOWN)
             return "LEFT OR RIGHT CHANGES IT";
         if (ctl_cursor == CTL_DEFAULTS)
             return "A PUTS BACK THE USUAL LAYOUT";
@@ -246,7 +250,7 @@ const char *nx_menu_hint(void)
     }
     switch (cursor) {
     case ITEM_CONTROLS:
-        return "REMAP BUTTONS, TALK";
+        return "REMAP THE BUTTONS";
     case ITEM_SIZE:
         return "2X MAY NOT HOLD 60 FPS";
     case ITEM_CAPTURE:
@@ -268,7 +272,7 @@ static void control_change(int step)
         if (step > 0)
             for (int i = 0; i < CTLS; i++)
                 ctl_map[i] = ctl_defaults[i];
-    } else if (ctl_cursor < CTLS) {
+    } else if (ctl_cursor < CTL_SHOWN) {
         int most = ctl_cursor == CTL_TALK ? SW_TALK_CHOICES : SW_DC_CHOICES;
         ctl_map[ctl_cursor] = (ctl_map[ctl_cursor] + (step < 0 ? most - 1 : 1)) % most;
     } else {

@@ -2,6 +2,20 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-23: TALK off until the characters' idle lines are found
+
+- the owner (7bc647f): TALK in Station Square played Tikal's voice, not the character's. Row 18 is
+  Tikal's voiced story hint for each character (the decomp's "each character's voiced hints" was
+  read as the character speaking, and the speaker wasn't checked). Wrong lines, my error.
+- What the request means: TCRF lists, for the Dreamcast game, each character's two idle lines per
+  area after about 30 s standing still. The SADX mod (michael-fadely/sadx-idle-chatter, 20
+  lines) only sets the player's IdleTime to 0x7fff on Z; SADX's own code plays the line. In the
+  decomp (JP 1.007) idle_steps > FIDGET_STEPS (1800) only starts the fidget action in all six
+  characters; no reader of idle_steps outside the player files, no voice in the fidget path, no
+  stage/character voice table found in src or modules, none named in SADXModLoader's headers.
+- TALK_READY 0 in nx_menu.c: the hook always answers no and the CONTROLS page hides TALK. READMEs
+  no longer mention it. Not built yet.
+
 ## 2026-11-23: CONTROLS (button remapping) and TALK
 
 - A community request: the characters' voiced "where am I, what now" lines on a button, as a PC

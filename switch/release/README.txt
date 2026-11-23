@@ -62,7 +62,7 @@ Press Minus and Plus together in the game.
   small mistakes possible where two see-through surfaces cross. It changes at once.
 - VOICES and TEXT: English or Japanese, each on its own (English needs the US disc).
 - CONTROLS: which Switch button presses each Dreamcast button (A, B, X, Y and the two
-  triggers), and the TALK button; DEFAULTS puts back the usual layout. The menu itself always
+  triggers); DEFAULTS puts back the usual layout. The menu itself always
   uses A, B and Minus + Plus.
 - VOLUME, FPS COUNTER, CAPTURES (pictures for bug reports on stick clicks; costs speed).
 - QUIT GAME.
@@ -90,12 +90,6 @@ Not yet in English:
 - The opening title screen stays Japanese on purpose (it reads Sonic Adventure).
 - Text built into the game's program rather than its data files (for example the memory card
   messages) has not been checked and may still be Japanese.
-
-TALK
-----
-Each character has voiced lines about where they are and what to do next, picked by how far
-their story has gone. Tap Minus (on its own) in Station Square, Mystic Ruins, the Egg Carrier or
-the Past to hear the one for now, with its subtitle. CONTROLS can move TALK to another button.
 
 Known issues
 ------------
