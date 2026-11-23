@@ -18,6 +18,13 @@ Newest first. One entry per session, with evidence.
 - make_release.sh: SARE_STRIP update (default once out/strip-cache/ holds a last strip) or full;
   the cache was seeded from release 0.5.0 (audit 64).
 - the owner (351fe14): TALK and the D-pad first-person look round work.
+- CAMERA STICK (the owner's request): the game turns the camera only with L and R (the follow camera
+  reads their buttons, the orbits how far they are pulled; camera/modes.c), and has no pitch
+  control outside the first-person look. The right stick past a quarter presses R (right) or L
+  (left), pulled in proportion. ON by default, INVERTED, OFF; setting camera_stick. Up and down
+  would be a new camera feature, not done.
+- Patch 0017: native_hook_idle_said logs each idle line played (voice, TALK or standing still,
+  stage, act, character).
 
 ## 2026-11-23: idle lines from SADX's table, TALK back on, D-PAD LOOK (first-person view)
 

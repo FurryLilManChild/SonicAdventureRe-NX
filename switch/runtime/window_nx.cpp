@@ -37,6 +37,7 @@ extern "C" volatile int nx_menu_open, nx_menu_request, nx_menu_quit;
 extern "C" u64 nx_control_mask(int i);
 extern "C" volatile int nx_talk_request;
 extern "C" int nx_dpad_move;
+extern "C" int nx_camera_stick;
 extern "C" int nx_volume;
 // the pause trace (nx_trace.c): newly pressed Start as the window reports it
 extern "C" void nx_trace_start_pressed(unsigned long read, uint32_t held, uint32_t press);
@@ -334,6 +335,27 @@ sa_result window_pad(Window *window, uint32_t port, sa_pad &pad)
     pad.r = right ? 255 : 0;
     held |= left ? PAD_TL : 0;
     held |= right ? PAD_TR : 0;
+    // CAMERA STICK: the right stick turns the camera as the Dreamcast's triggers do (the game
+    // turns it with L and R: by how far they are pulled in its orbits, on or off in its follow
+    // camera). Right is R, left is L (INVERTED swaps them); past a quarter of the way
+    if (nx_camera_stick) {
+        float v = nx_camera_stick == 2 ? -rx : rx;
+        float m = v < 0 ? -v : v;
+        if (m > 0.25f) {
+            int amount = (int)((m - 0.25f) / 0.75f * 255.0f + 0.5f);
+            if (amount > 255)
+                amount = 255;
+            if (v > 0) {
+                if (amount > pad.r)
+                    pad.r = amount;
+                held |= PAD_TR;
+            } else {
+                if (amount > pad.l)
+                    pad.l = amount;
+                held |= PAD_TL;
+            }
+        }
+    }
 
     pad.on = held;
     pad.press = held & ~window->held;

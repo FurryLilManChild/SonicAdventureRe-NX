@@ -38,7 +38,7 @@
  
  /* script_run's result for a branch that passes in a row without runs */
  #define NO_RUNS ((void *)-1)
-@@ -736,3 +738,180 @@
+@@ -736,3 +738,182 @@
          request->ready = TRUE;
      }
  }
@@ -216,6 +216,8 @@
 +    idle = idle_voice();
 +    if (idle >= 0) {
 +        stream_request_voice(idle);
++        native_hook_idle_said(idle, fidget, STAGE_OF(stage_get_stage_act()),
++                              stage_get_stage_act() & 0xff, get_character());
 +    }
 +}
 +#endif
@@ -235,7 +237,7 @@
  #endif
 --- a/engine/native/bare.c
 +++ b/engine/native/bare.c
-@@ -129,6 +129,16 @@
+@@ -129,6 +129,26 @@
      return NULL;
  }
  
@@ -249,12 +251,22 @@
 +    return 0;
 +}
 +
++void native_hook_idle_said(int voice, int fidget, int stage, int act,
++                           int character)
++{
++    (void)voice;
++    (void)fidget;
++    (void)stage;
++    (void)act;
++    (void)character;
++}
++
  int native_hook_hint_parts(const char *text, const char **parts, int most)
  {
      (void)most;
 --- a/engine/native/prelude.h
 +++ b/engine/native/prelude.h
-@@ -94,5 +94,10 @@
+@@ -94,5 +94,14 @@
   * gives the parts to show in its place, one after the other, at most most of
   * them, and how many (1 with the page itself where it has none) */
  int native_hook_hint_parts(const char *text, const char **parts, int most);
@@ -263,11 +275,15 @@
 + * idle line */
 +int native_hook_talk(void);
 +int native_hook_idle_lines(void);
++/* the idle line the game plays: its voice, 1 when the character began to
++ * fidget (0 for TALK), and where */
++void native_hook_idle_said(int voice, int fidget, int stage, int act,
++                           int character);
  
  #endif
 --- a/engine/native/native.h
 +++ b/engine/native/native.h
-@@ -262,6 +262,11 @@
+@@ -262,6 +262,15 @@
   * gives the parts to show in its place, one after the other, at most most of
   * them, and how many (1 with the page itself where it has none) */
  int native_hook_hint_parts(const char *text, const char **parts, int most);
@@ -276,6 +292,10 @@
 + * idle line */
 +int native_hook_talk(void);
 +int native_hook_idle_lines(void);
++/* the idle line the game plays: its voice, 1 when the character began to
++ * fidget (0 for TALK), and where */
++void native_hook_idle_said(int voice, int fidget, int stage, int act,
++                           int character);
  int native_hook_voice_file(const char *archive, int fid, const void **data,
                             size_t *size);
  /* a disc file the game opens by name: native_hook_disc_file may give a host

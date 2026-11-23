@@ -40,6 +40,7 @@ int nx_settings_capture;       // the captures setting for the next start
 int nx_translucency_fast;      // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster)
 volatile int nx_talk_request;  // set by the window when TALK is pressed, taken by the game's step
 int nx_dpad_move;              // 0: the D-pad is its own, as on the Dreamcast (first-person look); 1: it walks
+int nx_camera_stick = 1;       // the right stick turns the camera (L and R): 0 off, 1 on, 2 inverted
 int nx_idle_lines = 1;         // 1: a character standing still says its idle line as it fidgets, as in SADX
 
 // --- the controls: which Switch button presses each Dreamcast button, and TALK ---
@@ -116,6 +117,13 @@ int __wrap_native_hook_idle_lines(void)
     return nx_idle_lines;
 }
 
+// the game says which idle line it plays (patch 0017), for the log
+void __wrap_native_hook_idle_said(int voice, int fidget, int stage, int act, int character)
+{
+    fprintf(stderr, "idle line: voice %d (%s), stage %d act %d, character %d\n", voice, fidget ? "standing still" : "TALK",
+            stage, act, character);
+}
+
 // the renderer asks each picture how its translucent triangles compose (patch 0016):
 // SA_PC_BLEND_PIXEL (0) or SA_PC_BLEND_TRIANGLE (3)
 int native_blend_mode(void)
@@ -137,13 +145,16 @@ static const char *scale_name(int halves)
 enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_CONTROLS, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
 // the controls page's items: the controls, then DEFAULTS and BACK
 enum { PAGE_MAIN, PAGE_CONTROLS };
-// the page's rows: the six Dreamcast buttons, TALK, D-PAD, IDLE LINES, DEFAULTS, BACK
+// the page's rows: the six Dreamcast buttons, TALK, D-PAD, CAMERA STICK, IDLE LINES, DEFAULTS, BACK
 #define CTL_SHOWN CTLS
 #define CTL_DPAD CTLS
-#define CTL_IDLE (CTLS + 1)
-#define CTL_DEFAULTS (CTLS + 2)
-#define CTL_BACK (CTLS + 3)
-#define CTL_ITEMS (CTLS + 4)
+#define CTL_CAMERA (CTLS + 1)
+#define CTL_IDLE (CTLS + 2)
+#define CTL_DEFAULTS (CTLS + 3)
+#define CTL_BACK (CTLS + 4)
+#define CTL_ITEMS (CTLS + 5)
+static const char *const camera_names[] = {"OFF", "ON", "INVERTED"};
+static const char *const camera_settings[] = {"off", "on", "inverted"};
 static int page;
 static int ctl_cursor;
 
@@ -198,6 +209,8 @@ static void save_settings(void)
             "# the D-pad: look (its own, as on the Dreamcast: standing still it looks round in first\n"
             "# person) or move (it walks, like the stick)\n"
             "dpad %s\n"
+            "# the right stick turns the camera (as the Dreamcast's L and R): on, inverted or off\n"
+            "camera_stick %s\n"
             "# a character standing still says its idle line as it fidgets: 1 on, 0 off\n"
             "idle_lines %d\n",
             disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", 1,
@@ -206,7 +219,7 @@ static void save_settings(void)
             nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese",
             sw_buttons[ctl_map[0]].setting, sw_buttons[ctl_map[1]].setting, sw_buttons[ctl_map[2]].setting,
             sw_buttons[ctl_map[3]].setting, sw_buttons[ctl_map[4]].setting, sw_buttons[ctl_map[5]].setting,
-            sw_buttons[ctl_map[6]].setting, nx_dpad_move ? "move" : "look", nx_idle_lines);
+            sw_buttons[ctl_map[6]].setting, nx_dpad_move ? "move" : "look", camera_settings[nx_camera_stick], nx_idle_lines);
     fclose(f);
     fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %s, capture %d, volume %d, counter %d, "
                     "voices %s, text %s\n",
@@ -226,6 +239,7 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
         for (int i = 0; i < CTL_SHOWN; i++)
             snprintf(lines[n++], 40, "%-15s %s", ctl_names[i], sw_buttons[ctl_map[i]].name);
         snprintf(lines[n++], 40, "%-15s %s", "D-PAD", nx_dpad_move ? "MOVE" : "LOOK");
+        snprintf(lines[n++], 40, "%-15s %s", "CAMERA STICK", camera_names[nx_camera_stick]);
         snprintf(lines[n++], 40, "%-15s %s", "IDLE LINES", nx_idle_lines ? "ON" : "OFF");
         snprintf(lines[n++], 40, "DEFAULTS");
         snprintf(lines[n++], 40, "BACK");
@@ -258,6 +272,8 @@ const char *nx_menu_hint(void)
             return "THE CHARACTER'S LINE FOR HERE";
         if (ctl_cursor == CTL_DPAD)
             return nx_dpad_move ? "WALKS, LIKE THE STICK" : "STAND STILL: FIRST-PERSON LOOK";
+        if (ctl_cursor == CTL_CAMERA)
+            return nx_camera_stick ? "RIGHT STICK TURNS THE CAMERA" : "THE TRIGGERS ALONE TURN IT";
         if (ctl_cursor == CTL_IDLE)
             return "A LINE AFTER 30 S STANDING STILL";
         if (ctl_cursor < CTL_SHOWN)
@@ -291,10 +307,13 @@ static void control_change(int step)
             for (int i = 0; i < CTLS; i++)
                 ctl_map[i] = ctl_defaults[i];
             nx_dpad_move = 0;
+            nx_camera_stick = 1;
             nx_idle_lines = 1;
         }
     } else if (ctl_cursor == CTL_DPAD) {
         nx_dpad_move = !nx_dpad_move;
+    } else if (ctl_cursor == CTL_CAMERA) {
+        nx_camera_stick = (nx_camera_stick + (step < 0 ? 2 : 1)) % 3;
     } else if (ctl_cursor == CTL_IDLE) {
         nx_idle_lines = !nx_idle_lines;
     } else if (ctl_cursor < CTL_SHOWN) {
@@ -305,8 +324,8 @@ static void control_change(int step)
     }
     char line[200];
     nx_controls_describe(line, sizeof line);
-    fprintf(stderr, "menu: controls: %s, dpad %s, idle_lines %d\n", line, nx_dpad_move ? "move" : "look",
-            nx_idle_lines);
+    fprintf(stderr, "menu: controls: %s, dpad %s, camera_stick %s, idle_lines %d\n", line,
+            nx_dpad_move ? "move" : "look", camera_settings[nx_camera_stick], nx_idle_lines);
     save_settings();
 }
 

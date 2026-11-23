@@ -62,6 +62,8 @@ Press Minus and Plus together in the game.
   - TALK (a tap of Minus by default): the character says its idle line for where it is.
   - D-PAD: LOOK (the default, as on the Dreamcast): stand still and press the D-pad to look
     round in first person; a face button or the stick ends it. MOVE: the D-pad walks.
+  - CAMERA STICK: ON (the default): the right stick turns the camera left and right, as the
+    Dreamcast's L and R triggers do. INVERTED swaps the directions; OFF leaves it to the triggers.
   - IDLE LINES: ON (the default): a character left standing for about 30 seconds says its
     line, as in Sonic Adventure DX.
   DEFAULTS puts back the usual layout. The menu itself always uses A, B and Minus + Plus.

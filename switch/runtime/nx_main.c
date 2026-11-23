@@ -48,6 +48,7 @@ extern int nx_voices_english, nx_text_english;
 extern int nx_translucency_fast;
 extern int nx_dpad_move;
 extern int nx_idle_lines;
+extern int nx_camera_stick;
 // the controls (nx_menu.c)
 int nx_control_setting(const char *name, const char *value);
 void nx_controls_describe(char *out, size_t size);
@@ -290,6 +291,8 @@ static void settings_log(const char *path)
             nx_control_setting(name, value);
             if (!strcmp(name, "dpad"))
                 nx_dpad_move = !strcmp(value, "move");
+            if (!strcmp(name, "camera_stick"))
+                nx_camera_stick = !strcmp(value, "off") ? 0 : !strcmp(value, "inverted") ? 2 : 1;
             if (!strcmp(name, "idle_lines"))
                 nx_idle_lines = atoi(value) != 0;
             if (!strcmp(name, "counter"))
@@ -302,8 +305,8 @@ static void settings_log(const char *path)
         nx_halves = nx_resolution == 2 ? 4 : 2;
     line("  (the port's resolution: %s)\n", nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x");
     line("  (translucency: %s)\n", nx_translucency_fast ? "fast, per triangle" : "accurate, per pixel");
-    line("  (d-pad: %s; idle lines %s)\n", nx_dpad_move ? "move, like the stick" : "look, as the Dreamcast",
-         nx_idle_lines ? "on" : "off");
+    line("  (d-pad: %s; camera stick %s; idle lines %s)\n", nx_dpad_move ? "move, like the stick" : "look, as the Dreamcast",
+         nx_camera_stick == 2 ? "inverted" : nx_camera_stick ? "on" : "off", nx_idle_lines ? "on" : "off");
     {
         char controls[200];
         nx_controls_describe(controls, sizeof controls);
