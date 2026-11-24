@@ -62,6 +62,7 @@ def main():
     files = images.files()
     os.chdir(cwd)
     paths = sorted(set(files.values()))
+    datas = []
     for p in paths:
         full = os.path.join(decomp, 'orig', p)
         if not os.path.exists(full):
@@ -70,6 +71,7 @@ def main():
         if p.upper().endswith('.PRS'):
             dec = os.path.join(decomp, 'build/gen/img', os.path.basename(p)[:-4] + '.BIN')
             d = open(dec, 'rb').read() if os.path.exists(dec) else prs_decompress(d)
+        datas.append(d)
         sh_src, _ = hashes(d, 1)
         pos = np.searchsorted(sh, sh_src)
         pos[pos >= len(sh)] = len(sh) - 1
@@ -79,6 +81,13 @@ def main():
             b = np.searchsorted(sh, q, side='right')
             found[order[a:b]] = True
     found &= ok
+    # a window counts only where its bytes are on the disc too: the hash alone takes a few windows
+    # of mostly zero words (doubles, pointers) for others
+    for w in np.nonzero(found)[0]:
+        off = int(w) * 4
+        win = bytes(body[off:off + W])
+        if not any(win in d for d in datas):
+            found[w] = False
     print(f'audit: {int(ok.sum())} windows checked, {int(found.sum())} found on the disc')
     if elf and found.any():
         secs = sorted((a - start, a - start + s, n) for n, (a, s, f) in elf_sections(elf).items() if s and a >= start)

@@ -2,6 +2,22 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-24: release 0.5.3 prepared
+
+- 8b91d32's [gpu] lines, the tornado standing still on ACCURATE at stock clocks: 6.4 ms of device
+  time a picture (pass 2.9, resolve 3.1) for the same ~760,000 fragments, 59 to 60 fps (was 11.5 ms,
+  41 fps). raster: "subgroups of 32, stages 0x3f, operations 0x6ff": NVK on the GM20B takes the WAVE
+  build. The bridge before the tornado still spiked on ACCURATE (up to 3 million fragments a
+  picture, resolve 7.2 ms); EFFECTS FAST covers it.
+- TRANSLUCENCY defaults to EFFECTS FAST (nx_translucency_fast = 2; first-run settings say
+  "translucency effects"). README, README.txt and the release notes say so; updating players keep
+  their setting and are told to choose it.
+- audit.py counted 31 and 34 windows "on the disc" for the test strips. An exact search found none
+  of the 34 in any disc file: the 64-bit hash takes some windows of mostly zero words (doubles,
+  pointers) for others. audit.py now confirms each hashed hit by its bytes; the last strip
+  (7a677b3) and 8b91d32's both audit 0. out/strip-cache/last.audit set to 0.
+- The CPU and device still take turns each picture (fix 3, overlapping them): left for later.
+
 ## 2026-11-24: faster per-pixel translucency (test)
 
 - a995d70's [gpu] lines, Windy Valley's tornado standing still: ACCURATE at stock clocks 11.5 ms of
