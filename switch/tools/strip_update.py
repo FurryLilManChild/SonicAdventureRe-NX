@@ -235,7 +235,7 @@ def main():
                 tries += 1
         if best is None:
             dropped += 1
-            lost.append(at)
+            lost.append((at, n))
             continue
         take(best, c, s_at, n)
         near_moved += 1
@@ -243,11 +243,14 @@ def main():
     # again whole against their own disc file (step 2 below), as strip.py's first pass does. A
     # section whose moved pieces were all found near their place needs no more: matching it whole
     # again took most of an update's time (33 sections, about 400 s) and found little or nothing
-    resections = set()
-    for at in lost:
+    # Only the bytes around each lost piece's place in its section are matched again (LOST_ROOM
+    # each side), not the whole section: a section's other pieces were placed already
+    LOST_ROOM = 4096
+    resections = {}
+    for at, n in lost:
         key, off = old_find.find(old_start + at)
         if key is not None and key[0] == 'S' and key[1].startswith('sa1_data_'):
-            resections.add(key[1])
+            resections.setdefault(key[1], []).append((off - LOST_ROOM, off + n + LOST_ROOM))
     for at, c, s_at, n, want, guess in later:
         moved_bytes += n
     say(f'{moved} pieces in place again, {near_moved} found near their place, {dropped} not '
@@ -365,13 +368,30 @@ def main():
 
     # 2. what changed: content sections and data symbols that are new or differ, pointers aside
     changed_secs = changed_syms = new_bytes = 0
+    lost_regions = 0
     for name, b in sorted(new_secdata.items()):
-        if name in old_secdata and masked(old_secdata[name]) == masked(b) and name not in resections:
+        same = name in old_secdata and masked(old_secdata[name]) == masked(b)
+        if same and name not in resections:
             continue
-        changed_secs += 1
         a, size = new_at[('S', name)]
         c = source(name[len('sa1_data_'):])
-        new_bytes += match_free(a - start, size, [c] if c is not None else [])
+        cands = [c] if c is not None else []
+        if not same:
+            changed_secs += 1
+            new_bytes += match_free(a - start, size, cands)
+            continue
+        # unchanged but for lost pieces: their neighborhoods, merged where they overlap
+        spans = sorted((max(0, lo), min(size, hi)) for lo, hi in resections[name])
+        merged = []
+        for lo, hi in spans:
+            if merged and lo <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
+            else:
+                merged.append((lo, hi))
+        for lo, hi in merged:
+            if hi > lo:
+                lost_regions += 1
+                new_bytes += match_free(a - start + lo, hi - lo, cands)
     for key, b in new_data.items():
         old = old_data.get(key)
         if old is not None and len(old) == len(b) and masked(old) == masked(b):
@@ -386,7 +406,8 @@ def main():
         changed_syms += 1
         cands = [c for c in (source(prog), source('1st_read')) if c is not None]
         new_bytes += match_free(at0, size, cands)
-    say(f'{changed_secs} content sections ({len(resections)} for lost pieces) and {changed_syms} data symbols new or changed: '
+    say(f'{changed_secs} content sections changed, {lost_regions} places of lost pieces in {len(resections)} more, '
+        f'and {changed_syms} data symbols new or changed: '
         f'{new_bytes} more bytes from the disc')
 
     # 3. (strip.py's 3 and 4) anything else the disc holds: each 16-byte window of the image (at

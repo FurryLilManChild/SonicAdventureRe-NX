@@ -25,6 +25,11 @@ Newest first. One entry per session, with evidence.
   nearly all of those near their place. Now only sections with a piece lost (found neither in place
   nor near) are matched whole: on d1f4557's build 4 sections, the strip 5 min 21 s instead of
   10 min 20 s, audit 0, fill_check the same as the full image (332,398 pieces).
+- Then only the bytes around each lost piece's place (4096 each side) are matched again, not its
+  whole section. The same case (7a677b3's strip to d1f4557's build, 298 pieces lost): 27 places in
+  4 sections, 230 bytes from the disc (whole sections: 217), the strip 3 min 32 s, audit 0,
+  fill_check the same (332,405 pieces). From 8b91d32's strip (no section lost a piece): 2 min 36 s,
+  audit 0, fill_check the same.
 
 ## 2026-11-24: faster per-pixel translucency (test)
 
