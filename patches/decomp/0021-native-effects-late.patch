@@ -1,0 +1,255 @@
+diff --git a/engine/pc/raster.h b/engine/pc/raster.h
+--- a/engine/pc/raster.h
++++ b/engine/pc/raster.h
+@@ -41,6 +41,9 @@ constexpr uint32_t BATCH_COLLECT = 128;
+ /* the batch clips at the picture's near_z, as Ninja's full drawer does.
+  * other batches clip at z = 1 */
+ constexpr uint32_t BATCH_NEAR = 256;
++/* a port's: the batch draws after the resolve, blended in order onto the
++ * resolved picture rather than collected */
++constexpr uint32_t BATCH_LATE = 512;
+ 
+ /* how a batch samples its texture. the low two bits hold an SA_FILTER_
+  * value. SAMPLE_ADJUST holds the mipmap's D adjust as a material's mip_bias
+diff --git a/engine/pc/raster.cpp b/engine/pc/raster.cpp
+--- a/engine/pc/raster.cpp
++++ b/engine/pc/raster.cpp
+@@ -417,6 +417,9 @@ struct Raster::Impl {
+     VkImageView color_view = VK_NULL_HANDLE;
+     VkImageView depth_view = VK_NULL_HANDLE;
+     VkRenderPass pass = VK_NULL_HANDLE;
++    /* a port's: the same attachments, kept, for BATCH_LATE's batches after
++     * the resolve */
++    VkRenderPass late_pass = VK_NULL_HANDLE;
+     VkFramebuffer framebuffer = VK_NULL_HANDLE;
+     VkDescriptorSetLayout picture_layout = VK_NULL_HANDLE;
+     VkDescriptorSetLayout texture_layout = VK_NULL_HANDLE;
+@@ -1717,6 +1720,7 @@ Raster::~Raster()
+         vk.vkDestroyDescriptorSetLayout(r.device, r.picture_layout, nullptr);
+         vk.vkDestroyDescriptorSetLayout(r.device, r.texture_layout, nullptr);
+         vk.vkDestroyRenderPass(r.device, r.pass, nullptr);
++        vk.vkDestroyRenderPass(r.device, r.late_pass, nullptr);
+         vk.vkDestroyCommandPool(r.device, r.pool, nullptr);
+         vk.vkDestroyDevice(r.device, nullptr);
+     }
+@@ -1979,7 +1983,8 @@ bool Raster::open(const RasterOptions &options, std::string &why)
+     attachments[0].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+     attachments[1] = attachments[0];
+     attachments[1].format = VK_FORMAT_D32_SFLOAT;
+-    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
++    /* kept for BATCH_LATE's batches */
++    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+     attachments[1].finalLayout =
+         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+     VkAttachmentReference color_ref{0,
+@@ -2015,6 +2020,40 @@ bool Raster::open(const RasterOptions &options, std::string &why)
+                 r.pass, "vkCreateRenderPass", why)) {
+         return false;
+     }
++    /* the late pass loads what the pass and the resolve left, and waits for
++     * the resolve's writes and the pass's depth */
++    VkAttachmentDescription kept[2] = {attachments[0], attachments[1]};
++    kept[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
++    kept[0].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
++    kept[1].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
++    kept[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
++    kept[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
++    VkSubpassDependency late_deps[2] = {after, {}};
++    late_deps[1].srcSubpass = VK_SUBPASS_EXTERNAL;
++    late_deps[1].dstSubpass = 0;
++    late_deps[1].srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
++                                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
++                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
++    late_deps[1].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
++                                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
++                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
++    late_deps[1].srcAccessMask =
++        VK_ACCESS_SHADER_WRITE_BIT |
++        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
++        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++    late_deps[1].dstAccessMask =
++        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
++        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
++        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
++        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++    pass_info.pAttachments = kept;
++    pass_info.dependencyCount = 2;
++    pass_info.pDependencies = late_deps;
++    if (!r.made(vk.vkCreateRenderPass(r.device, &pass_info, nullptr,
++                                      &r.late_pass),
++                r.late_pass, "vkCreateRenderPass", why)) {
++        return false;
++    }
+ 
+     /* the layouts: the picture's constants in set 0, and a texture in set 1.
+      * the batch's flags and blend instructions are pushed */
+@@ -2329,7 +2368,9 @@ bool Raster::submit(uint32_t frame, const PictureUniform &picture,
+      * acquired */
+     r.drawn.clear();
+     for (const Batch &b : batches) {
+-        VkPipeline p = r.pipeline(b.state, sorted && b.state.blend, why);
++        VkPipeline p = r.pipeline(
++            b.state,
++            sorted && b.state.blend && (b.state.flags & BATCH_LATE) == 0, why);
+         VkDescriptorSet set =
+             p != VK_NULL_HANDLE
+                 ? r.texture_set(b.state.texture, b.state.sample, why)
+@@ -2433,27 +2474,38 @@ bool Raster::submit(uint32_t frame, const PictureUniform &picture,
+     vk.vkCmdBindVertexBuffers(c, 0, 1, &f.vertices.buffer, &zero);
+     vk.vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_GRAPHICS, r.layout, 0,
+                                1, &f.picture_set, 0, nullptr);
+-    VkPipeline bound = VK_NULL_HANDLE;
+-    for (size_t i = 0; i < batches.size(); i++) {
+-        const Batch &b = batches[i];
+-        bool collect = sorted && b.state.blend;
+-        VkPipeline p = r.drawn[i].first;
+-        Push push{b.state.flags | (collect ? BATCH_COLLECT : 0),
+-                  (b.state.src & 7U) | (b.state.dst & 7U) << 3};
+-        VkDescriptorSet set = r.drawn[i].second;
+-
+-        if (p != bound) {
+-            vk.vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
+-            bound = p;
++    /* the batches of one pass: BATCH_LATE's, or the others */
++    bool any_late = false;
++    auto draw_batches = [&](bool late) {
++        VkPipeline bound = VK_NULL_HANDLE;
++        for (size_t i = 0; i < batches.size(); i++) {
++            const Batch &b = batches[i];
++            bool is_late = (b.state.flags & BATCH_LATE) != 0;
++            any_late = any_late || is_late;
++            if (is_late != late) {
++                continue;
++            }
++            bool collect = sorted && b.state.blend && !is_late;
++            VkPipeline p = r.drawn[i].first;
++            Push push{(b.state.flags & ~BATCH_LATE) |
++                          (collect ? BATCH_COLLECT : 0),
++                      (b.state.src & 7U) | (b.state.dst & 7U) << 3};
++            VkDescriptorSet set = r.drawn[i].second;
++
++            if (p != bound) {
++                vk.vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
++                bound = p;
++            }
++            vk.vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_GRAPHICS,
++                                       r.layout, 1, 1, &set, 0, nullptr);
++            vk.vkCmdPushConstants(c, r.layout,
++                                  VK_SHADER_STAGE_VERTEX_BIT |
++                                      VK_SHADER_STAGE_FRAGMENT_BIT,
++                                  0, sizeof push, &push);
++            vk.vkCmdDraw(c, b.count, 1, b.first, 0);
+         }
+-        vk.vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_GRAPHICS, r.layout,
+-                                   1, 1, &set, 0, nullptr);
+-        vk.vkCmdPushConstants(c, r.layout,
+-                              VK_SHADER_STAGE_VERTEX_BIT |
+-                                  VK_SHADER_STAGE_FRAGMENT_BIT,
+-                              0, sizeof push, &push);
+-        vk.vkCmdDraw(c, b.count, 1, b.first, 0);
+-    }
++    };
++    draw_batches(false);
+     vk.vkCmdEndRenderPass(c);
+     if (sorted) {
+         vk.vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, r.resolve);
+@@ -2461,6 +2513,23 @@ bool Raster::submit(uint32_t frame, const PictureUniform &picture,
+                                    0, 1, &f.picture_set, 0, nullptr);
+         vk.vkCmdDispatch(c, (r.target.width + GROUP - 1) / GROUP,
+                          (r.target.height + GROUP - 1) / GROUP, 1);
++        if (any_late) {
++            /* the effects, blended per triangle onto the resolved picture */
++            VkRenderPassBeginInfo late{
++                VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
++            late.renderPass = r.late_pass;
++            late.framebuffer = r.framebuffer;
++            late.renderArea = {{0, 0}, r.target};
++            vk.vkCmdBeginRenderPass(c, &late, VK_SUBPASS_CONTENTS_INLINE);
++            vk.vkCmdSetViewport(c, 0, 1, &viewport);
++            vk.vkCmdSetScissor(c, 0, 1, &scissor);
++            vk.vkCmdBindVertexBuffers(c, 0, 1, &f.vertices.buffer, &zero);
++            vk.vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_GRAPHICS,
++                                       r.layout, 0, 1, &f.picture_set, 0,
++                                       nullptr);
++            draw_batches(true);
++            vk.vkCmdEndRenderPass(c);
++        }
+         r.barrier(c, r.color, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+                   0, 1, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+diff --git a/engine/pc/scene.h b/engine/pc/scene.h
+--- a/engine/pc/scene.h
++++ b/engine/pc/scene.h
+@@ -70,6 +70,8 @@ struct BlendTriangle {
+     float draw_z;
+     float own_z;
+     bool screen;
++    /* a sprite's or polygon's, which a port may blend per triangle */
++    bool effect = false;
+ };
+ 
+ class Scene {
+diff --git a/engine/pc/scene.cpp b/engine/pc/scene.cpp
+--- a/engine/pc/scene.cpp
++++ b/engine/pc/scene.cpp
+@@ -670,10 +670,10 @@ void Scene::placed(const sa_sprite &s, uint32_t texture)
+     Vertex tris[6] = {quad[0], quad[1], quad[2], quad[2], quad[1], quad[3]};
+     if (blended) {
+         float z = screen ? screen_z : facing ? view[2] + s.bias : view[2];
+-        blend_list_.push_back(
+-            BlendTriangle{state, {tris[0], tris[1], tris[2]}, z, z, screen});
+-        blend_list_.push_back(
+-            BlendTriangle{state, {tris[3], tris[4], tris[5]}, z, z, screen});
++        blend_list_.push_back(BlendTriangle{
++            state, {tris[0], tris[1], tris[2]}, z, z, screen, !screen});
++        blend_list_.push_back(BlendTriangle{
++            state, {tris[3], tris[4], tris[5]}, z, z, screen, !screen});
+     } else {
+         add(vertices_, batches_, state, tris, 6);
+     }
+@@ -741,8 +741,8 @@ void Scene::placed(const sa_triangles &t, const sa_point *points,
+                           : (view_z(tri[0].at) + view_z(tri[1].at) +
+                              view_z(tri[2].at)) /
+                                 3.0F;
+-            blend_list_.push_back(
+-                BlendTriangle{state, {tri[0], tri[1], tri[2]}, z, z, screen});
++            blend_list_.push_back(BlendTriangle{
++                state, {tri[0], tri[1], tri[2]}, z, z, screen, !screen});
+         } else {
+             add(vertices_, batches_, state, tri, 3);
+         }
+@@ -846,12 +846,33 @@ extern "C" int native_blend_mode(void) __attribute__((weak));
+ 
+ void Scene::finish()
+ {
++    /* a port's mode past the SA_PC_BLEND_*s: per pixel, but the sprites and
++     * polygons outside the screen's (smoke, dust, sparks) blend per triangle
++     * after the resolve */
++    constexpr int BLEND_EFFECTS = 4;
++    bool effects = false;
++
+     if (native_blend_mode) {
+         int mode = native_blend_mode();
+-        if (mode >= 0) {
++        if (mode == BLEND_EFFECTS) {
++            blend_ = SA_PC_BLEND_PIXEL;
++            effects = true;
++        } else if (mode >= 0) {
+             blend_ = static_cast<uint32_t>(mode);
+         }
+     }
++    if (effects) {
++        auto late = std::stable_partition(
++            blend_list_.begin(), blend_list_.end(),
++            [](const BlendTriangle &t) { return !t.effect; });
++        std::stable_sort(late, blend_list_.end(),
++                         [](const BlendTriangle &a, const BlendTriangle &b) {
++                             return a.own_z > b.own_z;
++                         });
++        for (auto t = late; t != blend_list_.end(); ++t) {
++            t->state.flags |= BATCH_LATE;
++        }
++    }
+     /* the PowerVR's lists in order: opaque, then blend. a host's sort goes
+      * from the farthest, and keeps the draws' order in a tie */
+     if (blend_ != SA_PC_BLEND_PIXEL) {

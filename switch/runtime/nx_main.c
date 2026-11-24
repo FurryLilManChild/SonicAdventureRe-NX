@@ -246,7 +246,8 @@ static const char default_settings[] =
     "resolution 1\n"
     "# the port's resolution: 1x (640x480), 1.5x (960x720) or 2x (1280x960)\n"
     "scale 1x\n"
-    "# translucency: accurate (per pixel, as the Dreamcast) or fast (per triangle)\n"
+    "# translucency: accurate (per pixel, as the Dreamcast), effects (accurate, but smoke\n"
+    "# and dust per triangle) or fast (per triangle)\n"
     "translucency accurate\n"
     "# the port's captures for Claude (stick clicks): 1 on, 0 off; on costs speed\n"
     "capture 0\n"
@@ -309,7 +310,7 @@ static void settings_log(const char *path)
             if (!strcmp(name, "text"))
                 nx_text_english = strcmp(value, "japanese") != 0;
             if (!strcmp(name, "translucency"))
-                nx_translucency_fast = !strcmp(value, "fast");
+                nx_translucency_fast = !strcmp(value, "fast") ? 1 : !strcmp(value, "effects") ? 2 : 0;
             nx_control_setting(name, value);
             if (!strcmp(name, "dpad"))
                 nx_dpad_move = !strcmp(value, "move");
@@ -328,7 +329,9 @@ static void settings_log(const char *path)
     if (!scale_seen)
         nx_halves = nx_resolution == 2 ? 4 : 2;
     line("  (the port's resolution: %s)\n", nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x");
-    line("  (translucency: %s)\n", nx_translucency_fast ? "fast, per triangle" : "accurate, per pixel");
+    line("  (translucency: %s)\n", nx_translucency_fast == 1   ? "fast, per triangle"
+                               : nx_translucency_fast == 2 ? "accurate, effects per triangle"
+                                                           : "accurate, per pixel");
     line("  (d-pad: %s; camera stick %s; idle lines %s)\n", nx_dpad_move ? "move, like the stick" : "look, as the Dreamcast",
          nx_camera_stick == 2 ? "inverted" : nx_camera_stick ? "on" : "off", nx_idle_lines ? "on" : "off");
     line("  (trials: %s)\n", nx_trials_open ? "all open" : "as saved");

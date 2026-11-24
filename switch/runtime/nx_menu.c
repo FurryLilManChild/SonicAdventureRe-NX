@@ -38,7 +38,8 @@ int nx_resolution = 1;         // settings.txt's resolution (the decomp's, kept 
 int nx_halves = 2;             // the port's resolution in halves of 640x480: 2, 3 or 4 (1X to 2X)
 int nx_settings_capture;       // the captures setting for the next start
 int nx_trials_open;            // 1: every Trial stage and mini game open (patch 0019), the save untouched
-int nx_translucency_fast;      // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster)
+int nx_translucency_fast;      // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster);
+                               // 2: per pixel, but sprites and polygons (smoke, dust) per triangle
 volatile int nx_talk_request;  // set by the window when TALK is pressed, taken by the game's step
 int nx_dpad_move;              // 0: the D-pad is its own, as on the Dreamcast (first-person look); 1: it walks
 int nx_camera_stick = 1;       // the right stick turns the camera (L and R): 0 off, 1 on, 2 inverted
@@ -134,7 +135,7 @@ void __wrap_native_hook_idle_said(int voice, int fidget, int stage, int act, int
 // SA_PC_BLEND_PIXEL (0) or SA_PC_BLEND_TRIANGLE (3)
 int native_blend_mode(void)
 {
-    return nx_translucency_fast ? 3 : 0;
+    return nx_translucency_fast == 1 ? 3 : nx_translucency_fast == 2 ? 4 : 0;
 }
 
 // the raster asks for the resolution each pad read (patch 0006)
@@ -199,7 +200,8 @@ static void save_settings(void)
             "resolution %d\n"
             "# the port's resolution: 1x (640x480), 1.5x (960x720) or 2x (1280x960)\n"
             "scale %s\n"
-            "# translucency: accurate (per pixel, as the Dreamcast) or fast (per triangle)\n"
+            "# translucency: accurate (per pixel, as the Dreamcast), effects (accurate, but smoke\n"
+            "# and dust per triangle) or fast (per triangle)\n"
             "translucency %s\n"
             "# the port's captures for Claude (stick clicks): 1 on, 0 off; on costs speed\n"
             "capture %d\n"
@@ -222,7 +224,7 @@ static void save_settings(void)
             "# trials: open (every Trial stage and mini game, the save left as it is) or saved\n"
             "trials %s\n",
             disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", 1,
-            nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_translucency_fast ? "fast" : "accurate",
+            nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_translucency_fast == 1 ? "fast" : nx_translucency_fast == 2 ? "effects" : "accurate",
             nx_settings_capture, nx_volume, nx_overlay_on,
             nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese",
             sw_buttons[ctl_map[0]].setting, sw_buttons[ctl_map[1]].setting, sw_buttons[ctl_map[2]].setting,
@@ -261,7 +263,8 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
     snprintf(lines[n++], 40, "WIDESCREEN      %s", port_toggles[1] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "60 FPS          %s", port_toggles[2] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "RESOLUTION      %s", scale_name(nx_halves));
-    snprintf(lines[n++], 40, "TRANSLUCENCY    %s", nx_translucency_fast ? "FAST" : "ACCURATE");
+    snprintf(lines[n++], 40, "TRANSLUCENCY    %s",
+             nx_translucency_fast == 1 ? "FAST" : nx_translucency_fast == 2 ? "EFFECTS FAST" : "ACCURATE");
     snprintf(lines[n++], 40, "VOICES          %s", nx_voices_english ? "ENGLISH" : "JAPANESE");
     snprintf(lines[n++], 40, "TEXT            %s", nx_text_english ? "ENGLISH" : "JAPANESE");
     snprintf(lines[n++], 40, "CONTROLS");
@@ -302,7 +305,9 @@ const char *nx_menu_hint(void)
     case ITEM_TRIALS:
         return nx_trials_open ? "EVERY STAGE, SAVE UNCHANGED" : "WHAT YOUR SAVE HAS CLEARED";
     case ITEM_TRANSLUCENCY:
-        return nx_translucency_fast ? "PER TRIANGLE: FASTER IN SMOKE" : "PER PIXEL, AS THE DREAMCAST";
+        return nx_translucency_fast == 1   ? "PER TRIANGLE: FASTER IN SMOKE"
+               : nx_translucency_fast == 2 ? "SMOKE, DUST FAST; REST ACCURATE"
+                                           : "PER PIXEL, AS THE DREAMCAST";
     case ITEM_VOICES:
         return nx_english_has_voices() ? "CUTSCENE VOICES" : "NO ENGLISH FILES ON SD";
     case ITEM_TEXT:
@@ -358,8 +363,10 @@ static void change(int step)
         nx_halves = 2 + (nx_halves - 2 + (step < 0 ? 2 : 1)) % 3;
         break;
     case ITEM_TRANSLUCENCY:
-        nx_translucency_fast = !nx_translucency_fast;
-        fprintf(stderr, "menu: translucency %s\n", nx_translucency_fast ? "fast" : "accurate");
+        /* ACCURATE, EFFECTS FAST, FAST */
+        nx_translucency_fast = nx_translucency_fast == 0 ? 2 : nx_translucency_fast == 2 ? 1 : 0;
+        fprintf(stderr, "menu: translucency %s\n",
+                nx_translucency_fast == 1 ? "fast" : nx_translucency_fast == 2 ? "effects" : "accurate");
         break;
     case ITEM_VOICES:
         nx_voices_english = !nx_voices_english;

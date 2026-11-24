@@ -2,6 +2,20 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-24: TRANSLUCENCY EFFECTS FAST (test)
+
+- Heavy smoke and dust cost a lot under ACCURATE (per-pixel lists and the resolve); FAST sorts every
+  see-through triangle instead. The new middle option keeps models (level, water, glass, objects)
+  per pixel and moves sprites and immediate polygons outside the screen's (njDrawSprite3D,
+  njDrawTexture, njDrawPolygon3D: the particle pools, dust, smoke, sparks) to a late list.
+- patches/decomp/0021-native-effects-late.patch: Scene::finish() takes the port's blend mode 4,
+  puts those triangles last, sorted far to near, flagged BATCH_LATE (512). raster.cpp keeps the
+  depth image, draws BATCH_LATE batches without collect in a second render pass (load ops, its own
+  dependency on the resolve and the depth writes) after resolve.comp.
+- Menu and settings: TRANSLUCENCY ACCURATE / EFFECTS FAST / FAST, saved as accurate, effects, fast.
+- Known: an effect behind another see-through surface (water, glass) draws over it. Speed gain
+  not measured yet.
+
 ## 2026-11-24: release 0.5.2
 
 - The owner tested b5812a1: Sky Deck past the big cannon no longer crashes. Casinopolis not yet
