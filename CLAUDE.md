@@ -32,7 +32,7 @@ skill before working here.
 
 | Upstream | Use | Licence |
 |---|---|---|
-| reshaped/sonic-adventure @ e9a6f8a | the game's C, the engine, the PC backend | Makefile, configs, `engine/`, `tools/`, `tests/`: MIT; the rest: none posted (the owner is fine building on it) |
+| reshaped/sonic-adventure @ 004279f | the game's C, the engine, the PC backend | Makefile, configs, `engine/`, `tools/`, `tests/`: MIT; the rest: none posted (the owner is fine building on it) |
 | SA-nx / dream-recomp (ours) | Switch window, NVK, input and audio code | GPL-2.0 |
 
 ## Plan

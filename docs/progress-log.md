@@ -2,6 +2,23 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-24: Sky Deck crash (0.5.1, community report): decomp to 004279f, heap check
+
+- Report (Atmosphere, 0.5.1, repeated at Sky Deck act 2 after the large cannon is destroyed):
+  Data Abort in heap_alloc (task.c:590, `prev->next = rest`) with prev = 0x4153, called from
+  task_create through heap_calloc; spark_step and explosion_step in the registers. A free block's
+  prev held 0x4153: the heap's free list was damaged earlier, by something else. Cause unknown.
+- Best lead, unproven: upstream 004279f (Nov 20, after our pin e9a6f8a) fixes native collision
+  mesh pool bugs (engine/native/mesh.c: an empty mesh read through null, the pool's last record,
+  the terminator) and lets a full set of 192 meshes be replaced. Sky Deck is busy with moving
+  solid objects. Moved the pin to 004279f; all 17 patches apply unchanged.
+- Patch 0018: the heap check. After each heap_alloc and heap_free the free list is walked
+  (each link in the arena, 16-byte aligned, linked back); a free of a block outside the heap or
+  already free is refused. The first 8 findings go to the log with the caller, the running step,
+  and the caller and step that freed the block last holding the damaged bytes (a ring of 4096
+  frees), as linked addresses for addr2line. Also: the most world objects per stage, past 144
+  (three quarters of 192), as a note line.
+
 ## 2026-11-23: release 0.5.1
 
 - Built 034d683 with SARE_VERSION 0.5.1 and SARE_RELEASE 1 (2.5 min). The update strip from

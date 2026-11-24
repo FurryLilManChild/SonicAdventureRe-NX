@@ -120,6 +120,27 @@ static void heartbeat(void *arg)
 alignas(16) u8 __nx_exception_stack[0x8000];
 u64 __nx_exception_stack_size = sizeof __nx_exception_stack;
 
+// the game's heap check (patch 0018): damage in its heap, with the addresses made ready for
+// addr2line against the full ELF (the same shift the crash log gives)
+void __wrap_native_hook_heap_damage(const char *what, unsigned long at, unsigned long value, void *caller,
+                                    void *step, void *freed_by, void *freed_step)
+{
+    u64 shift = nx_link_window_number - (u64)native_domain_base;
+#define LINKED(p) ((p) ? (u64)(p) + shift : 0)
+    fprintf(stderr,
+            "heap check: %s at %#lx (value %#lx), %.1f s in, %lu vsyncs; called from %#lx, step %#lx; "
+            "the block last there was freed from %#lx in step %#lx (addresses as linked)\n",
+            what, at, value, seconds(), native_vsyncs, LINKED(caller), LINKED(step), LINKED(freed_by),
+            LINKED(freed_step));
+#undef LINKED
+    fflush(stderr);
+}
+
+void __wrap_native_hook_note(const char *what, int n, int limit)
+{
+    fprintf(stderr, "note: %s %d (limit %d), %.1f s in\n", what, n, limit, seconds());
+}
+
 void __libnx_exception_handler(ThreadExceptionDump *ctx)
 {
     u64 window = (u64)native_domain_base, link = nx_link_window_number;

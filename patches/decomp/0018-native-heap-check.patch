@@ -1,0 +1,254 @@
+diff --git a/engine/native/bare.c b/engine/native/bare.c
+index 54791e9..68781b1 100644
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -129,6 +129,26 @@ const char *native_hook_event_text_next(void)
+     return NULL;
+ }
+ 
++void native_hook_heap_damage(const char *what, unsigned long at,
++                             unsigned long value, void *caller, void *step,
++                             void *freed_by, void *freed_step)
++{
++    (void)what;
++    (void)at;
++    (void)value;
++    (void)caller;
++    (void)step;
++    (void)freed_by;
++    (void)freed_step;
++}
++
++void native_hook_note(const char *what, int n, int limit)
++{
++    (void)what;
++    (void)n;
++    (void)limit;
++}
++
+ int native_hook_talk(void)
+ {
+     return 0;
+diff --git a/engine/native/native.h b/engine/native/native.h
+index 3771c6e..c53f68a 100644
+--- a/engine/native/native.h
++++ b/engine/native/native.h
+@@ -266,6 +266,14 @@ int native_hook_hint_parts(const char *text, const char **parts, int most);
+  * native_hook_idle_lines is 1, a character that starts to fidget says its
+  * idle line */
+ int native_hook_talk(void);
++/* the game's heap check found damage (system/task.c): what, where, the
++ * value found there, the caller, the step running, and the step and caller
++ * that freed the block last holding those bytes. any may be 0 */
++void native_hook_heap_damage(const char *what, unsigned long at,
++                             unsigned long value, void *caller, void *step,
++                             void *freed_by, void *freed_step);
++/* a number for the log: what, the number, and a limit it is told against */
++void native_hook_note(const char *what, int n, int limit);
+ int native_hook_idle_lines(void);
+ /* the idle line the game plays: its voice, 1 when the character began to
+  * fidget (0 for TALK), and where */
+diff --git a/engine/native/prelude.h b/engine/native/prelude.h
+index 69e4416..88de6bd 100644
+--- a/engine/native/prelude.h
++++ b/engine/native/prelude.h
+@@ -98,6 +98,14 @@ int native_hook_hint_parts(const char *text, const char **parts, int most);
+  * native_hook_idle_lines is 1, a character that starts to fidget says its
+  * idle line */
+ int native_hook_talk(void);
++/* the game's heap check found damage (system/task.c): what, where, the
++ * value found there, the caller, the step running, and the step and caller
++ * that freed the block last holding those bytes. any may be 0 */
++void native_hook_heap_damage(const char *what, unsigned long at,
++                             unsigned long value, void *caller, void *step,
++                             void *freed_by, void *freed_step);
++/* a number for the log: what, the number, and a limit it is told against */
++void native_hook_note(const char *what, int n, int limit);
+ int native_hook_idle_lines(void);
+ /* the idle line the game plays: its voice, 1 when the character began to
+  * fidget (0 for TALK), and where */
+diff --git a/src/collision/polygon.c b/src/collision/polygon.c
+index 504a3ff..8e08eb6 100644
+--- a/src/collision/polygon.c
++++ b/src/collision/polygon.c
+@@ -1754,6 +1754,24 @@ Bool collision_mesh_update(void)
+         world_collect_all();
+         mesh_collect_all = FALSE;
+     }
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    {
++        /* for the log: the most world objects at once in each stage, past
++         * three quarters of MESHES */
++        static int told_stage = -1;
++        static int told_most;
++        int stage = stage_get_stage_act() >> 8;
++
++        if (stage != told_stage) {
++            told_stage = stage;
++            told_most = MESHES * 3 / 4;
++        }
++        if (world_count > told_most) {
++            told_most = world_count;
++            native_hook_note("world objects", world_count, MESHES);
++        }
++    }
++#endif
+ #ifdef DREAMCAST
+ #ifdef NONMATCHING
+     mesh_finds_fill();
+diff --git a/src/system/task.c b/src/system/task.c
+index 0fa3d44..78f75f7 100644
+--- a/src/system/task.c
++++ b/src/system/task.c
+@@ -527,7 +527,110 @@ void heap_init(void)
+     dat_8c7a7de4 = 0;
+ }
+ 
++
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* the heap check: after each heap_alloc and heap_free, the free list is
++ * walked and each link tested (in the arena, on a 16-byte boundary, linked
++ * back). the first damage found is told to the host with the step that was
++ * running, the caller, and the freed block that last held the damaged bytes,
++ * since a write through a freed pointer is the likeliest cause. a free of a
++ * block not in use, or not in the arena, is told the same way */
++#define HEAP_FREES 4096
++static struct {
++    Uint8 *start;
++    Uint8 *end;
++    void *caller;
++    void *step;
++} heap_frees[HEAP_FREES];
++static int heap_frees_next;
++static int heap_damage_told;
++
++static Bool heap_in_arena(const void *p)
++{
++    const Uint8 *b = p;
++
++    return b >= heap_arena && b <= heap_arena + HEAP_SIZE &&
++           ((b - heap_arena) & 15) == 0;
++}
++
++static void heap_tell(const char *what, const void *at, unsigned long value,
++                      void *caller)
++{
++    void *freed_by = NULL;
++    void *freed_step = NULL;
++    int i;
++    int k;
++
++    if (heap_damage_told >= 8) {
++        return;
++    }
++    heap_damage_told++;
++    for (i = 0; i < HEAP_FREES; i++) {
++        k = (heap_frees_next - 1 - i + HEAP_FREES) % HEAP_FREES;
++        if (heap_frees[k].start != NULL &&
++            (const Uint8 *)at >= heap_frees[k].start &&
++            (const Uint8 *)at < heap_frees[k].end) {
++            freed_by = heap_frees[k].caller;
++            freed_step = heap_frees[k].step;
++            break;
++        }
++    }
++    native_hook_heap_damage(what, (unsigned long)(Uint8 *)at, value, caller,
++                            (void *)task_current_root_step, freed_by,
++                            freed_step);
++}
++
++static void heap_check(void *caller)
++{
++    struct heap_block *block;
++    int count = 0;
++
++    if (heap_damage_told >= 8) {
++        return;
++    }
++    for (block = heap_free_list; block != NULL; block = block->next) {
++        if (!heap_in_arena(block)) {
++            heap_tell("a free block outside the heap", block, 0, caller);
++            return;
++        }
++        if (block->next != NULL &&
++            (!heap_in_arena(block->next) || block->next->prev != block)) {
++            heap_tell("a free block's next", &block->next,
++                      (unsigned long)(Uint8 *)block->next, caller);
++            return;
++        }
++        if (block->after != NULL && (!heap_in_arena(block->after) ||
++                                     block->after->before != block)) {
++            heap_tell("a free block's after", &block->after,
++                      (unsigned long)(Uint8 *)block->after, caller);
++            return;
++        }
++        if (++count > 100000) {
++            heap_tell("the free list loops", block, 0, caller);
++            return;
++        }
++    }
++}
++#define HEAP_CHECK() heap_check(__builtin_return_address(0))
++#else
++#define HEAP_CHECK() ((void)0)
++#endif
++
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++static void *heap_alloc_unchecked(int size);
++
++void *heap_alloc(int size)
++{
++    void *mem = heap_alloc_unchecked(size);
++
++    HEAP_CHECK();
++    return mem;
++}
++
++static void *heap_alloc_unchecked(int size)
++#else
+ void *heap_alloc(int size)
++#endif
+ {
+     struct heap_block *block;
+     struct heap_block *head;
+@@ -618,7 +721,40 @@ void *heap_calloc(int count, int size)
+ 
+ /* merge the block with each free neighbor. the end block never merges: its
+  * null after marks the heap's end */
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++static void heap_free_unchecked(void *mem);
++
+ void heap_free(void *mem)
++{
++    struct heap_block *block = (struct heap_block *)mem - 1;
++    void *caller = __builtin_return_address(0);
++
++    if (mem == NULL) {
++        return;
++    }
++    if (!heap_in_arena(block) || (Uint8 *)block == heap_arena + HEAP_SIZE) {
++        heap_tell("a free of a block outside the heap", mem, 0, caller);
++        return;
++    }
++    if (block->next != NULL || block->prev != NULL || block == heap_free_list) {
++        heap_tell("a free of a block already free", mem, 0, caller);
++        return;
++    }
++    if (block->after != NULL && heap_in_arena(block->after)) {
++        heap_frees[heap_frees_next].start = (Uint8 *)block;
++        heap_frees[heap_frees_next].end = (Uint8 *)block->after;
++        heap_frees[heap_frees_next].caller = caller;
++        heap_frees[heap_frees_next].step = (void *)task_current_root_step;
++        heap_frees_next = (heap_frees_next + 1) % HEAP_FREES;
++    }
++    heap_free_unchecked(mem);
++    heap_check(caller);
++}
++
++static void heap_free_unchecked(void *mem)
++#else
++void heap_free(void *mem)
++#endif
+ {
+     struct heap_block *block;
+     struct heap_block *before;
