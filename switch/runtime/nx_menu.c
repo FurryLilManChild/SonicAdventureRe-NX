@@ -138,6 +138,52 @@ int native_blend_mode(void)
     return nx_translucency_fast == 1 ? 3 : nx_translucency_fast == 2 ? 4 : 0;
 }
 
+// the renderer's device time for each picture in parts (patch 0021): the pass, the resolve (the
+// per-pixel sort, ACCURATE and EFFECTS FAST only) and the rest (the late effects, the copies),
+// and how many translucent fragments the pass kept for the resolve. Every 120 pictures the log
+// gets one line of averages and peaks, with the TRANSLUCENCY setting they were drawn under
+static uint32_t gpu_count, gpu_mode;
+static uint64_t gpu_pass, gpu_resolve, gpu_rest, gpu_total, gpu_most, gpu_frags;
+static uint32_t gpu_most_frags;
+
+static void gpu_line(void)
+{
+    uint32_t n = gpu_count;
+
+    fprintf(stderr,
+            "[gpu] %s: %u pictures: device %.2f ms a picture (most %.2f): pass %.2f, resolve %.2f, "
+            "rest %.2f; translucent layers %.0f a picture (most %u)\n",
+            gpu_mode == 1 ? "fast" : gpu_mode == 2 ? "effects" : "accurate", n, gpu_total / 1e6 / n,
+            gpu_most / 1e6, gpu_pass / 1e6 / n, gpu_resolve / 1e6 / n, gpu_rest / 1e6 / n,
+            (double)gpu_frags / n, gpu_most_frags);
+    gpu_count = 0;
+    gpu_pass = gpu_resolve = gpu_rest = gpu_total = gpu_most = gpu_frags = 0;
+    gpu_most_frags = 0;
+}
+
+void native_gpu_parts(uint64_t pass_ns, uint64_t resolve_ns, uint64_t rest_ns, uint32_t fragments)
+{
+    uint32_t now = (uint32_t)nx_translucency_fast;
+    uint64_t total = pass_ns + resolve_ns + rest_ns;
+
+    // a change of setting ends the stretch early, so no line mixes two settings
+    if (gpu_count != 0 && now != gpu_mode)
+        gpu_line();
+    gpu_mode = now;
+    gpu_count++;
+    gpu_pass += pass_ns;
+    gpu_resolve += resolve_ns;
+    gpu_rest += rest_ns;
+    gpu_total += total;
+    gpu_frags += fragments;
+    if (total > gpu_most)
+        gpu_most = total;
+    if (fragments > gpu_most_frags)
+        gpu_most_frags = fragments;
+    if (gpu_count >= 120)
+        gpu_line();
+}
+
 // the raster asks for the resolution each pad read (patch 0006)
 uint32_t native_resolution_halves(void)
 {

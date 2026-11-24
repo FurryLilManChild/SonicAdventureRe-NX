@@ -2,6 +2,21 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-24: measuring translucency's cost
+
+- The owner's test of 7a677b3: Tails' plane cutscene held 30 fps on EFFECTS FAST where ACCURATE dipped
+  to 24 (5 s heartbeats, one run each). The Windy Valley tornado stayed at 36 to 43 fps on EFFECTS
+  FAST against 58 to 61 on FAST: its walls are models, kept per pixel. FAST draws them with flat
+  vertical stripes, so FAST is no answer there. The owner wants every translucency slowdown solved
+  before a release.
+- To find where ACCURATE's time goes: four timestamps a picture (start, after the pass, after the
+  resolve, end; patch 0021) and native_gpu_parts, which nx_menu.c sums into a "[gpu]" log line
+  every 120 pictures (or at a change of TRANSLUCENCY): device ms in all, the pass, the resolve, the
+  rest, and the fragments collected. A test build (not SARE_RELEASE) also writes times.txt.
+- Leads to check against the numbers: resolve.comp keeps a 64-entry index array a thread and reads
+  each fragment's depth and order from the buffer inside its insertion sort; draw.frag takes every
+  fragment's slot with one atomicAdd on a single counter.
+
 ## 2026-11-24: TRANSLUCENCY EFFECTS FAST (test)
 
 - Heavy smoke and dust cost a lot under ACCURATE (per-pixel lists and the resolve); FAST sorts every
