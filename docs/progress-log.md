@@ -2,6 +2,23 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-24: faster per-pixel translucency (test)
+
+- a995d70's [gpu] lines, Windy Valley's tornado standing still: ACCURATE at stock clocks 11.5 ms of
+  device time a picture (pass 6.9, resolve 4.2) for about 755,000 collected fragments, 41 fps;
+  FAST 2.6 ms (pass 2.1), 60 fps; ACCURATE with the GPU at 768 MHz 6.9 ms (pass 3.4, resolve 3.2),
+  57 to 58 fps. 755,000 fragments of 16 bytes is about 12 MB a way, near 1 ms of the memory's
+  bandwidth, so most of the 9 ms is overhead. times.txt: the game's CPU about 5.2 ms a picture,
+  and with 11.5 ms of device time every picture reached late: CPU and device take turns.
+- Patch 0021 now also: draw.frag writes each fragment as one uvec4 (one store, not four), and
+  under WAVE (built again with -DWAVE for SPIR-V 1.3, replay.mk) a subgroup takes its fragments'
+  room with one atomicAdd by its lowest non-helper invocation, shared by a shuffle. raster.cpp picks
+  the WAVE module where vkGetPhysicalDeviceProperties2 says the fragment stage has basic, ballot and
+  shuffle, and logs the subgroup figures. resolve.comp reads each fragment once, whole, sorts the
+  copies, and blends a pixel of one fragment with no list. The picture is meant to be the same
+  bit for bit: the same order, the same MOST, the same cut.
+- Next, separately: overlap the game's CPU work with the device's.
+
 ## 2026-11-24: measuring translucency's cost
 
 - The owner's test of 7a677b3: Tails' plane cutscene held 30 fps on EFFECTS FAST where ACCURATE dipped
