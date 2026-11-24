@@ -18,6 +18,14 @@ Newest first. One entry per session, with evidence.
   and the caller and step that freed the block last holding the damaged bytes (a ring of 4096
   frees), as linked addresses for addr2line. Also: the most world objects per stage, past 144
   (three quarters of 192), as a note line.
+- Patch 0019 (f65e7b9): TRIALS in the port menu (ALL OPEN or AS SAVED, default; setting
+  trials) opens every Trial stage and mini game through the four list checks all_open passes,
+  not all_open itself (that also opens the internet item and the last story). Declared in
+  trial.c alone, so only 6 files rebuilt (1 min 52 s).
+- Test build f65e7b9 strip: the update strip took 15 min (the new decomp moved most data) and
+  left 73 audit windows (.rodata texture names whose windows match the disc only once their
+  neighbors are zeroed). The short-string pass now repeats until a round takes nothing; rerun
+  from its own result: 6 min 49 s, audit 38 (0.5.1: 39), fill_check identical.
 
 ## 2026-11-23: release 0.5.1
 

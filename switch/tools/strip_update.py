@@ -469,22 +469,28 @@ def main():
     view = bytearray(body)
     for at, src, s_at, n in pieces:
         view[at:at + n] = bytes(n)
-    _, okv = hashes(bytes(view), 4)
     more = 0
-    for w, c, j in disc_windows(view, not_taken(okv)):
-        d = sources[c][1]
-        at = w * 4
-        if bytes(view[at:at + W]) != d[j:j + W]:
-            continue
-        for k in range(W):
-            if not covered[at + k] and at + k not in rel_words and view[at + k]:
-                e = k
-                while e < W and not covered[at + e] and at + e not in rel_words:
-                    e += 1
-                take(at + k, c, j + k, e - k)
-                for q in range(k, e):
-                    view[at + q] = 0
-                more += e - k
+    # again until a round takes nothing: each string taken can leave its neighbor's window
+    # matching the disc only now
+    for _round in range(8):
+      took = more
+      _, okv = hashes(bytes(view), 4)
+      for w, c, j in disc_windows(view, not_taken(okv)):
+          d = sources[c][1]
+          at = w * 4
+          if bytes(view[at:at + W]) != d[j:j + W]:
+              continue
+          for k in range(W):
+              if not covered[at + k] and at + k not in rel_words and view[at + k]:
+                  e = k
+                  while e < W and not covered[at + e] and at + e not in rel_words:
+                      e += 1
+                  take(at + k, c, j + k, e - k)
+                  for q in range(k, e):
+                      view[at + q] = 0
+                  more += e - k
+      if more == took:
+        break
     say(f'{more} more bytes in short disc strings')
 
     # the stripped image, checked as strip.py checks it
