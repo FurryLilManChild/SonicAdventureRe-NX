@@ -1,6 +1,6 @@
 # SonicAdventureRe-nx
 
-Version 0.5.2, needs testing.
+Version 0.5.3, needs testing.
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
 sonic-adventure decompilation (https://github.com/reshaped/sonic-adventure): the game's own
@@ -60,9 +60,11 @@ Press Minus and Plus together in the game.
 - WIDESCREEN: on (16:9) or off (4:3).
 - 60 FPS: on, or off for the game's own 30.
 - RESOLUTION: 1X, 1.5X, 2X. 2X may not hold 60 fps.
-- TRANSLUCENCY: ACCURATE (the default) draws see-through effects per pixel, as the Dreamcast
-  did; FAST sorts them per triangle and is quicker where smoke, dust and fog pile up, with
-  small mistakes possible where two see-through surfaces cross. It changes at once.
+- TRANSLUCENCY: EFFECTS FAST (the default, recommended) draws see-through surfaces per pixel,
+  as the Dreamcast did, but smoke, dust and sparks per triangle, which keeps them quick where
+  they pile up. ACCURATE draws everything per pixel. FAST sorts everything per triangle, with
+  visible mistakes possible where see-through surfaces cross (the Windy Valley tornado's
+  edges, for one). It changes at once.
 - VOICES and TEXT: English or Japanese, each on its own (English needs the US disc).
 - CONTROLS: which Switch button presses each Dreamcast button (A, B, X, Y and the two
   triggers), and:
@@ -104,8 +106,8 @@ Not yet in English:
 
 
 ## Known issues
-- Where smoke, dust or fog fill the screen, the frame rate can drop a lot with TRANSLUCENCY
-  ACCURATE. Try FAST there.
+- With TRANSLUCENCY ACCURATE, thick piles of smoke and dust can still drop the frame rate
+  (for one, the bridge before Windy Valley's tornado). EFFECTS FAST, the default, fixes that.
 - Some scenes may not hold 60 fps everywhere.
 - Cutscenes run at 30 fps, as in the original.
 - This build has not been played from start to finish.

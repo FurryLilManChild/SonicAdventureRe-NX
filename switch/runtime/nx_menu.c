@@ -38,7 +38,7 @@ int nx_resolution = 1;         // settings.txt's resolution (the decomp's, kept 
 int nx_halves = 2;             // the port's resolution in halves of 640x480: 2, 3 or 4 (1X to 2X)
 int nx_settings_capture;       // the captures setting for the next start
 int nx_trials_open;            // 1: every Trial stage and mini game open (patch 0019), the save untouched
-int nx_translucency_fast;      // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster);
+int nx_translucency_fast = 2;  // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster);
                                // 2: per pixel, but sprites and polygons (smoke, dust) per triangle
 volatile int nx_talk_request;  // set by the window when TALK is pressed, taken by the game's step
 int nx_dpad_move;              // 0: the D-pad is its own, as on the Dreamcast (first-person look); 1: it walks

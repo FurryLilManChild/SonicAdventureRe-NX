@@ -248,7 +248,7 @@ static const char default_settings[] =
     "scale 1x\n"
     "# translucency: accurate (per pixel, as the Dreamcast), effects (accurate, but smoke\n"
     "# and dust per triangle) or fast (per triangle)\n"
-    "translucency accurate\n"
+    "translucency effects\n"
     "# the port's captures for Claude (stick clicks): 1 on, 0 off; on costs speed\n"
     "capture 0\n"
     "# the port's own: sound volume in percent, the frame counter 1 on 0 off\n"

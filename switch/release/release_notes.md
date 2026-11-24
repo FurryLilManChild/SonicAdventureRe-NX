@@ -1,4 +1,4 @@
-# SonicAdventureRe-nx 0.5.2 (needs testing)
+# SonicAdventureRe-nx 0.5.3 (needs testing)
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
 [sonic-adventure](https://github.com/reshaped/sonic-adventure) decompilation: the game's own C
@@ -6,24 +6,18 @@ code compiled for the Switch, with a Vulkan renderer. Not an emulator.
 
 No game data is included. The port rebuilds the game from your own disc dumps.
 
-## Fixed in 0.5.2
+## Faster see-through effects
 
-- **Sky Deck crash** (act 2, after the big cannon is destroyed). The cannon's flying debris was
-  given less memory per piece than the pieces need on the Switch, so the last pieces overwrote
-  the game's memory bookkeeping and the game crashed soon after. Each piece now gets its real
-  size. Thanks to the community member who reported it with a crash report.
-- **Casinopolis**: the breakable pirates and spinning slots had the same mistake, and would
-  likely have crashed the same way. Fixed the same way; not yet play-tested there.
-- The port now uses the decompilation's newer version (Nov 20), with its author's own fixes
-  (collision, models and others).
-
-## New in 0.5.2
-
-- **TRIALS** in the port menu (Minus and Plus): ALL OPEN lists every Trial stage and mini game
-  for every character, without changing your save. AS SAVED (the default) shows what your save
-  has cleared.
-- A memory check: if the game's memory is ever damaged, the log says where, which helps track
-  down any crash like the one above.
+- **Translucency costs far less.** The per-pixel way the port draws see-through surfaces (as the
+  Dreamcast did) now does much less work on the Switch's GPU for the same picture. In Windy
+  Valley's tornado, at stock clocks, the GPU's time for a frame went from 11.5 ms to 6.4 ms, and
+  the frame rate there from about 41 to 60.
+- **TRANSLUCENCY EFFECTS FAST** is a new setting, and the default for new installs: see-through
+  surfaces stay per pixel, but smoke, dust and sparks are drawn the quick way, which keeps thick
+  smoke and dust (such as the bridge before the tornado) at full speed. ACCURATE and FAST are
+  still there.
+- **If you are updating**, your settings keep the TRANSLUCENCY you had: set EFFECTS FAST in the
+  port menu (Minus and Plus) for the recommended setting.
 
 ## Updating from an earlier version
 
@@ -60,7 +54,7 @@ not been checked. The opening title screen stays Japanese on purpose.
 
 ## Known issues
 
-- Heavy smoke, dust or fog can drop the frame rate a lot with TRANSLUCENCY ACCURATE: try FAST.
+- Thick smoke and dust can still slow TRANSLUCENCY ACCURATE down: EFFECTS FAST fixes that.
 - Some scenes may not hold 60 fps everywhere. Cutscenes run at 30, as in the original.
 - With 60 FPS on, the idle line may come after about 15 seconds instead of 30.
 
@@ -74,5 +68,5 @@ doing and your settings.
 
 | File | SHA-256 |
 |---|---|
-| SonicAdventureRe-nx-0.5.2-switch.zip | ZIP_SHA |
+| SonicAdventureRe-nx-0.5.3-switch.zip | ZIP_SHA |
 | SonicAdventureRe-nx.nro | NRO_SHA |
