@@ -2,6 +2,26 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-24: Sky Deck crash found: debris pieces outgrow their heap room
+
+- f65e7b9 on the owner's Switch: still crashed at Sky Deck past the big cannon; no heap check
+  line, no object note (under 144). Atmosphere report 01795534957: Data Abort in heap_free
+  (task.c:808, merging with the block after), from task_destroy, task_free_work, with
+  debris_destroy/debris_free (stg06/debris.c:489) in x23: freeing the debris's pieces met a
+  damaged next block.
+- Cause, proven from the build's DWARF: stg06 debris allocates count * PIECE_ROOM (60, "4 more
+  than it uses", the Dreamcast's 56-byte piece), but struct debris_piece is 0x40 = 64 bytes
+  natively (NJS_MODEL *model 8 bytes at 0x18). The last piece writes past the block into the
+  next block's header. The free-list check missed it: it walks free blocks only.
+- Sweep of the same kind: every heap_alloc sized by a constant (18 sites) against the struct's
+  native size. One more: stg09 (Casinopolis) fragments, FRAGMENT_SIZE 60 for a 64-byte struct
+  fragment. Shards (48 in 52) and the rest fit or use sizeof. All 836 *_vars structs against
+  task_vars (12): three larger (character_vars, particle_vars, stg10 camera_vars) are the
+  Dreamcast's own layouts, no pointers grown.
+- Patch 0020: PIECE_ROOM and FRAGMENT_SIZE are the struct's size plus 4 on the native build; the
+  heap check also tests a freed block's neighbors (before and after linked back), which a write
+  past a block's end reaches first.
+
 ## 2026-11-24: Sky Deck crash (0.5.1, community report): decomp to 004279f, heap check
 
 - Report (Atmosphere, 0.5.1, repeated at Sky Deck act 2 after the large cannon is destroyed):

@@ -1,0 +1,65 @@
+diff --git a/modules/stg06/debris.c b/modules/stg06/debris.c
+index 110fd52..2df9f3c 100644
+--- a/modules/stg06/debris.c
++++ b/modules/stg06/debris.c
+@@ -37,7 +37,15 @@ struct debris_piece {
+ #define PIECE_REST 40
+ 
+ /* the heap bytes the create gives each piece, 4 more than it uses */
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* on the native build a model pointer takes 8 bytes and the record grows to
++ * 64: the room follows the record, 4 more than it takes, as on the Dreamcast.
++ * a fixed 60 overran the heap block, and the next block's header with it
++ * (Sky Deck's cannon, 0.5.1) */
++#define PIECE_ROOM ((int)sizeof(struct debris_piece) + 4)
++#else
+ #define PIECE_ROOM 60
++#endif
+ 
+ struct debris {
+     int count; /* how many pieces there are */
+diff --git a/modules/stg09/fragments.c b/modules/stg09/fragments.c
+index 8cc0480..df51ec3 100644
+--- a/modules/stg09/fragments.c
++++ b/modules/stg09/fragments.c
+@@ -59,7 +59,15 @@ struct fragments_vars {
+ 
+ /* the heap's room for each fragment, 4 bytes more than struct fragment
+  * takes */
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* on the native build a model pointer takes 8 bytes and the record grows to
++ * 64: the room follows the record, 4 more than it takes, as on the Dreamcast.
++ * a fixed 60 overran the heap block, and the next block's header with it
++ * (Sky Deck's cannon, 0.5.1) */
++#define FRAGMENT_SIZE ((int)sizeof(struct fragment) + 4)
++#else
+ #define FRAGMENT_SIZE 60
++#endif
+ 
+ /* the speed ahead and up of casino_knock_player_back, and of the slow one. a
+  * knock-back ignores the stick for KNOCK_STEPS steps */
+diff --git a/src/system/task.c b/src/system/task.c
+index 78f75f7..860dfa1 100644
+--- a/src/system/task.c
++++ b/src/system/task.c
+@@ -740,6 +740,20 @@ void heap_free(void *mem)
+         heap_tell("a free of a block already free", mem, 0, caller);
+         return;
+     }
++    /* the neighbors' headers, which a write past the end of a block reaches
++     * first */
++    if (block->after != NULL && (!heap_in_arena(block->after) ||
++                                 block->after->before != block)) {
++        heap_tell("the block after a freed one", &block->after,
++                  (unsigned long)(Uint8 *)block->after, caller);
++        return;
++    }
++    if (block->before != NULL && (!heap_in_arena(block->before) ||
++                                  block->before->after != block)) {
++        heap_tell("the block before a freed one", &block->before,
++                  (unsigned long)(Uint8 *)block->before, caller);
++        return;
++    }
+     if (block->after != NULL && heap_in_arena(block->after)) {
+         heap_frees[heap_frees_next].start = (Uint8 *)block;
+         heap_frees[heap_frees_next].end = (Uint8 *)block->after;
