@@ -1,0 +1,73 @@
+diff --git a/engine/native/bare.c b/engine/native/bare.c
+index 68781b1..6e0722c 100644
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -149,6 +149,11 @@ void native_hook_note(const char *what, int n, int limit)
+     (void)limit;
+ }
+ 
++int native_hook_trials_open(void)
++{
++    return 0;
++}
++
+ int native_hook_talk(void)
+ {
+     return 0;
+diff --git a/modules/advertise/trial.c b/modules/advertise/trial.c
+index 4c8f65e..2b47512 100644
+--- a/modules/advertise/trial.c
++++ b/modules/advertise/trial.c
+@@ -109,6 +109,16 @@ static const int story_end_flags[STORIES] = {
+     FLAG_CLEAR_BIG,   FLAG_CLEAR_E102,  FLAG_CLEAR_LAST,
+ };
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* a host's setting may open every stage and mini game of the trials, as
++ * menu_state.all_open does, without the rest all_open opens (the internet
++ * item and the last story) */
++int native_hook_trials_open(void);
++#define TRIALS_OPEN (menu_state.all_open[0] || native_hook_trials_open())
++#else
++#define TRIALS_OPEN menu_state.all_open[0]
++#endif
++
+ struct trial_stage trial_choice;
+ 
+ void trial_reset(void)
+@@ -125,7 +135,7 @@ Uint8 trial_stage_count(int story)
+ 
+     for (i = 0; i < list->count; i++) {
+         if (stage_clears[story_characters[story]][list->stages[i].stage] != 0 ||
+-            menu_state.all_open[0]) {
++            TRIALS_OPEN) {
+             count++;
+         }
+     }
+@@ -140,7 +150,7 @@ Uint8 trial_mini_game_count(int story)
+ 
+     for (i = 0; i < list->count; i++) {
+         if (stage_clears[story_characters[story]][list->stages[i].stage] != 0 ||
+-            menu_state.all_open[0]) {
++            TRIALS_OPEN) {
+             count++;
+         }
+     }
+@@ -178,7 +188,7 @@ void trial_stage_list(struct trial_stages *list)
+     for (i = 0; i < all->count; i++) {
+         if (stage_clears[story_characters[menu_state.story]]
+                         [all->stages[i].stage] != 0 ||
+-            menu_state.all_open[0]) {
++            TRIALS_OPEN) {
+             ((struct trial_stage *)list->stages)[count] = all->stages[i];
+             count++;
+         }
+@@ -195,7 +205,7 @@ void trial_mini_game_list(struct trial_stages *list)
+     for (i = 0; i < all->count; i++) {
+         if (stage_clears[story_characters[menu_state.story]]
+                         [all->stages[i].stage] != 0 ||
+-            menu_state.all_open[0]) {
++            TRIALS_OPEN) {
+             ((struct trial_stage *)list->stages)[count] = all->stages[i];
+             count++;
+         }

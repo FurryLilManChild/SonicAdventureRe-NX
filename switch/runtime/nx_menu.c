@@ -37,6 +37,7 @@ int nx_volume = 100;           // percent, read by the sound thread
 int nx_resolution = 1;         // settings.txt's resolution (the decomp's, kept at 1)
 int nx_halves = 2;             // the port's resolution in halves of 640x480: 2, 3 or 4 (1X to 2X)
 int nx_settings_capture;       // the captures setting for the next start
+int nx_trials_open;            // 1: every Trial stage and mini game open (patch 0019), the save untouched
 int nx_translucency_fast;      // 0: per pixel, as the Dreamcast sorts it; 1: per triangle (faster)
 volatile int nx_talk_request;  // set by the window when TALK is pressed, taken by the game's step
 int nx_dpad_move;              // 0: the D-pad is its own, as on the Dreamcast (first-person look); 1: it walks
@@ -112,6 +113,11 @@ int __wrap_native_hook_talk(void)
     return 1;
 }
 
+int __wrap_native_hook_trials_open(void)
+{
+    return nx_trials_open;
+}
+
 int __wrap_native_hook_idle_lines(void)
 {
     return nx_idle_lines;
@@ -142,7 +148,7 @@ static const char *scale_name(int halves)
     return halves == 3 ? "1.5X" : halves == 4 ? "2X" : "1X";
 }
 
-enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_CONTROLS, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_QUIT, ITEMS };
+enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_CONTROLS, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_TRIALS, ITEM_QUIT, ITEMS };
 // the controls page's items: the controls, then DEFAULTS and BACK
 enum { PAGE_MAIN, PAGE_CONTROLS };
 // the page's rows: the six Dreamcast buttons, TALK, D-PAD, CAMERA STICK, IDLE LINES, DEFAULTS, BACK
@@ -212,14 +218,17 @@ static void save_settings(void)
             "# the right stick turns the camera (as the Dreamcast's L and R): on, inverted or off\n"
             "camera_stick %s\n"
             "# a character standing still says its idle line as it fidgets: 1 on, 0 off\n"
-            "idle_lines %d\n",
+            "idle_lines %d\n"
+            "# trials: open (every Trial stage and mini game, the save left as it is) or saved\n"
+            "trials %s\n",
             disc, port_toggles[1] ? "16:9" : "4:3", port_toggles[2] ? "60" : "30", 1,
             nx_halves == 3 ? "1.5x" : nx_halves == 4 ? "2x" : "1x", nx_translucency_fast ? "fast" : "accurate",
             nx_settings_capture, nx_volume, nx_overlay_on,
             nx_voices_english ? "english" : "japanese", nx_text_english ? "english" : "japanese",
             sw_buttons[ctl_map[0]].setting, sw_buttons[ctl_map[1]].setting, sw_buttons[ctl_map[2]].setting,
             sw_buttons[ctl_map[3]].setting, sw_buttons[ctl_map[4]].setting, sw_buttons[ctl_map[5]].setting,
-            sw_buttons[ctl_map[6]].setting, nx_dpad_move ? "move" : "look", camera_settings[nx_camera_stick], nx_idle_lines);
+            sw_buttons[ctl_map[6]].setting, nx_dpad_move ? "move" : "look", camera_settings[nx_camera_stick], nx_idle_lines,
+            nx_trials_open ? "open" : "saved");
     fclose(f);
     fprintf(stderr, "menu: settings saved: aspect %s, fps %s, resolution %s, capture %d, volume %d, counter %d, "
                     "voices %s, text %s\n",
@@ -259,6 +268,7 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
     snprintf(lines[n++], 40, "VOLUME          %d%%", nx_volume);
     snprintf(lines[n++], 40, "FPS COUNTER     %s", nx_overlay_on ? "ON" : "OFF");
     snprintf(lines[n++], 40, "CAPTURES        %s", nx_settings_capture ? "ON" : "OFF");
+    snprintf(lines[n++], 40, "TRIALS          %s", nx_trials_open ? "ALL OPEN" : "AS SAVED");
     snprintf(lines[n++], 40, "%s", quit_armed ? "QUIT: PRESS A AGAIN" : "QUIT GAME");
     *selected = 2 + cursor;
     return n;
@@ -289,6 +299,8 @@ const char *nx_menu_hint(void)
         return "2X MAY NOT HOLD 60 FPS";
     case ITEM_CAPTURE:
         return "NEXT START. ON COSTS SPEED";
+    case ITEM_TRIALS:
+        return nx_trials_open ? "EVERY STAGE, SAVE UNCHANGED" : "WHAT YOUR SAVE HAS CLEARED";
     case ITEM_TRANSLUCENCY:
         return nx_translucency_fast ? "PER TRIANGLE: FASTER IN SMOKE" : "PER PIXEL, AS THE DREAMCAST";
     case ITEM_VOICES:
@@ -367,6 +379,10 @@ static void change(int step)
         break;
     case ITEM_CAPTURE:
         nx_settings_capture = !nx_settings_capture;
+        break;
+    case ITEM_TRIALS:
+        nx_trials_open = !nx_trials_open;
+        fprintf(stderr, "menu: trials %s\n", nx_trials_open ? "all open" : "as saved");
         break;
     default:
         return;

@@ -49,6 +49,7 @@ extern int nx_translucency_fast;
 extern int nx_dpad_move;
 extern int nx_idle_lines;
 extern int nx_camera_stick;
+extern int nx_trials_open;
 // the controls (nx_menu.c)
 int nx_control_setting(const char *name, const char *value);
 void nx_controls_describe(char *out, size_t size);
@@ -312,6 +313,8 @@ static void settings_log(const char *path)
             nx_control_setting(name, value);
             if (!strcmp(name, "dpad"))
                 nx_dpad_move = !strcmp(value, "move");
+            if (!strcmp(name, "trials"))
+                nx_trials_open = !strcmp(value, "open");
             if (!strcmp(name, "camera_stick"))
                 nx_camera_stick = !strcmp(value, "off") ? 0 : !strcmp(value, "inverted") ? 2 : 1;
             if (!strcmp(name, "idle_lines"))
@@ -328,6 +331,7 @@ static void settings_log(const char *path)
     line("  (translucency: %s)\n", nx_translucency_fast ? "fast, per triangle" : "accurate, per pixel");
     line("  (d-pad: %s; camera stick %s; idle lines %s)\n", nx_dpad_move ? "move, like the stick" : "look, as the Dreamcast",
          nx_camera_stick == 2 ? "inverted" : nx_camera_stick ? "on" : "off", nx_idle_lines ? "on" : "off");
+    line("  (trials: %s)\n", nx_trials_open ? "all open" : "as saved");
     {
         char controls[200];
         nx_controls_describe(controls, sizeof controls);

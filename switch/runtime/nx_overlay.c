@@ -140,7 +140,7 @@ const char *nx_menu_hint(void);
 #define MENU_SCALE 2
 #define MENU_LINE (11 * MENU_SCALE)
 #define MENU_W 440
-#define MENU_H 388
+#define MENU_H 410
 static uint8_t menu_px[MENU_W * MENU_H * 4];
 
 static void draw_menu(void)
