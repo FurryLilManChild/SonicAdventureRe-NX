@@ -2,6 +2,17 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-24: release 0.5.2
+
+- The owner tested b5812a1: Sky Deck past the big cannon no longer crashes. Casinopolis not yet
+  played (same fix, same kind of object).
+- Built 4e9a733 with SARE_VERSION 0.5.2 and SARE_RELEASE 1 (95 s, no game file rebuilt); update
+  strip 160 s from b5812a1's; audit 37; fill_check identical (332,214 pieces).
+- SonicAdventureRe-nx-0.5.2-switch.zip sha256
+  5c969717c1c60d2d1ae83ee3022dc2ca6b069201a87491b5b3ffb6c54d924389; NRO sha256
+  50a2ddc458bdde161a31c3e480b4fd8b19d9dab0209f71e590f934df5c16b6aa. In out\release\ with
+  release_notes_0.5.2.md.
+
 ## 2026-11-24: Sky Deck crash found: debris pieces outgrow their heap room
 
 - f65e7b9 on the owner's Switch: still crashed at Sky Deck past the big cannon; no heap check
