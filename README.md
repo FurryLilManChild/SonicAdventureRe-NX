@@ -1,6 +1,6 @@
 # SonicAdventureRe-nx
 
-Version 0.5.1, needs testing.
+Version 0.5.2, needs testing.
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
 sonic-adventure decompilation (https://github.com/reshaped/sonic-adventure): the game's own
@@ -37,7 +37,7 @@ report what goes wrong (see Reporting problems).
 4. Launch through title takeover: hold R while opening any game, then pick
    SonicAdventureRe-nx in the Homebrew Menu. The Album does not give it enough memory.
 
-## Updating from 0.5.0
+## Updating from an earlier version
 1. Copy the `switch` folder from the zip to the root of your SD card, replacing the files
    already there. Keep `disc/`, `us_disc/`, `english/`, `settings.txt` and `card.bin` as they are.
 2. Launch. The first launch rebuilds the game from your unpacked disc (a short "building the
@@ -75,6 +75,8 @@ Press Minus and Plus together in the game.
     line, as in Sonic Adventure DX.
   DEFAULTS puts back the usual layout. The menu itself always uses A, B and Minus + Plus.
 - VOLUME, FPS COUNTER, CAPTURES (pictures for bug reports on stick clicks; costs speed).
+- TRIALS: ALL OPEN lists every Trial stage and mini game for every character, without changing
+  your save; AS SAVED (the default) shows what your save has cleared.
 - QUIT GAME.
 Settings are saved in settings.txt.
 

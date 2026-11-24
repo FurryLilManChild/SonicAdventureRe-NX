@@ -1,4 +1,4 @@
-# SonicAdventureRe-nx 0.5.1 (needs testing)
+# SonicAdventureRe-nx 0.5.2 (needs testing)
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
 [sonic-adventure](https://github.com/reshaped/sonic-adventure) decompilation: the game's own C
@@ -6,25 +6,26 @@ code compiled for the Switch, with a Vulkan renderer. Not an emulator.
 
 No game data is included. The port rebuilds the game from your own disc dumps.
 
-## New in 0.5.1
+## Fixed in 0.5.2
 
-- **Idle lines.** Each character's lines about where they are and what to do next, the way
-  Sonic Adventure DX plays them: half the time the character's own line for that stage (by act in
-  the adventure fields), otherwise a general line. The Japanese game has the voices but nothing
-  that plays them. They follow the VOICES setting (English or Japanese).
-  - IDLE LINES (CONTROLS page, on by default): a character left standing for about 30 seconds
-    says its line as it starts to fidget.
-  - TALK (a tap of Minus by default, can be remapped): plays the line right away.
-- **First-person view, restored.** Stand still and press the D-pad to look around from the
-  character's eyes, as on the Dreamcast; a face button or the stick ends it. It was blocked
-  because the D-pad also walked the character. D-PAD on the CONTROLS page: LOOK (the default) or
-  MOVE (the D-pad walks, as in 0.5.0).
-- **Camera on the right stick.** CAMERA STICK on the CONTROLS page: ON (the default), INVERTED or
-  OFF. The stick turns the camera left and right the way the Dreamcast's L and R triggers do (the
-  game has no up and down camera control outside the first-person view).
-- Button remapping (CONTROLS page) and more of Tikal's hints in English (173 hint pages).
+- **Sky Deck crash** (act 2, after the big cannon is destroyed). The cannon's flying debris was
+  given less memory per piece than the pieces need on the Switch, so the last pieces overwrote
+  the game's memory bookkeeping and the game crashed soon after. Each piece now gets its real
+  size. Thanks to the community member who reported it with a crash report.
+- **Casinopolis**: the breakable pirates and spinning slots had the same mistake, and would
+  likely have crashed the same way. Fixed the same way; not yet play-tested there.
+- The port now uses the decompilation's newer version (Nov 20), with its author's own fixes
+  (collision, models and others).
 
-## Updating from 0.5.0
+## New in 0.5.2
+
+- **TRIALS** in the port menu (Minus and Plus): ALL OPEN lists every Trial stage and mini game
+  for every character, without changing your save. AS SAVED (the default) shows what your save
+  has cleared.
+- A memory check: if the game's memory is ever damaged, the log says where, which helps track
+  down any crash like the one above.
+
+## Updating from an earlier version
 
 1. Copy the `switch` folder from the zip to the root of your SD card, replacing the files already
    there. Keep `disc/`, `us_disc/`, `english/`, `settings.txt` and `card.bin`.
@@ -73,5 +74,5 @@ doing and your settings.
 
 | File | SHA-256 |
 |---|---|
-| SonicAdventureRe-nx-0.5.1-switch.zip | ZIP_SHA |
+| SonicAdventureRe-nx-0.5.2-switch.zip | ZIP_SHA |
 | SonicAdventureRe-nx.nro | NRO_SHA |
