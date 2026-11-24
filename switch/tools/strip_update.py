@@ -188,6 +188,7 @@ def main():
     moved = near_moved = dropped = moved_bytes = 0
     why = {}
     later = []
+    lost = []
     for at, src, s_at, n in last_pieces:
         c = last_src[src]
         want = sources[c][1][s_at:s_at + n]
@@ -234,16 +235,20 @@ def main():
                 tries += 1
         if best is None:
             dropped += 1
+            lost.append(at)
             continue
         take(best, c, s_at, n)
         near_moved += 1
-    # the content sections where a piece was not where its section puts it: matched again whole
-    # against their own disc file (step 2 below), as strip.py's first pass does
+    # the content sections where a piece was lost (found neither in place nor near it): matched
+    # again whole against their own disc file (step 2 below), as strip.py's first pass does. A
+    # section whose moved pieces were all found near their place needs no more: matching it whole
+    # again took most of an update's time (33 sections, about 400 s) and found little or nothing
     resections = set()
-    for at, c, s_at, n, want, guess in later:
+    for at in lost:
         key, off = old_find.find(old_start + at)
         if key is not None and key[0] == 'S' and key[1].startswith('sa1_data_'):
             resections.add(key[1])
+    for at, c, s_at, n, want, guess in later:
         moved_bytes += n
     say(f'{moved} pieces in place again, {near_moved} found near their place, {dropped} not '
         f'({moved_bytes} bytes); first misses: {why}')
@@ -381,7 +386,7 @@ def main():
         changed_syms += 1
         cands = [c for c in (source(prog), source('1st_read')) if c is not None]
         new_bytes += match_free(at0, size, cands)
-    say(f'{changed_secs} content sections and {changed_syms} data symbols new or changed: '
+    say(f'{changed_secs} content sections ({len(resections)} for lost pieces) and {changed_syms} data symbols new or changed: '
         f'{new_bytes} more bytes from the disc')
 
     # 3. (strip.py's 3 and 4) anything else the disc holds: each 16-byte window of the image (at

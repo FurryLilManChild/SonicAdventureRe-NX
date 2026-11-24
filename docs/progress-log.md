@@ -17,6 +17,14 @@ Newest first. One entry per session, with evidence.
   pointers) for others. audit.py now confirms each hashed hit by its bytes; the last strip
   (7a677b3) and 8b91d32's both audit 0. out/strip-cache/last.audit set to 0.
 - The CPU and device still take turns each picture (fix 3, overlapping them): left for later.
+- Release build d1f4557 (SARE_RELEASE 1): update strip 10 min 20 s, audit 0. Zip sha256
+  d06e439d4a6ae9462017c44433d77384dd392c1b4f08848884c4eae41e8c5168, NRO sha256
+  5bc1f643bb2bfd4a02a80d97f42b3d43e952fdd2e7a0c7754f93868d91f7b3c9.
+- strip_update.py's step 2 matched 33 content sections whole again on every update (about 400 s
+  of 600, finding 0 to 217 bytes): every section with a piece that moved, though step 1 had found
+  nearly all of those near their place. Now only sections with a piece lost (found neither in place
+  nor near) are matched whole: on d1f4557's build 4 sections, the strip 5 min 21 s instead of
+  10 min 20 s, audit 0, fill_check the same as the full image (332,398 pieces).
 
 ## 2026-11-24: faster per-pixel translucency (test)
 
