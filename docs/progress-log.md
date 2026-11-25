@@ -2,6 +2,15 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-25: 0.5.4: the Final Egg and Amy fixes, tested
+
+- The owner's tests of 0.5.3-fe3 (e0cb6a8): Sonic stands on the floor around Final Egg's button
+  platform, and Amy's story plays through its end (from a save made with story_save.py at her
+  last section; he beat Zero and the ending played).
+- For the release the Final Egg trace's Switch side is gone (nx_main.c's wrap and build.sh's
+  --wrap); patch 0022's call stays and reaches bare.c's empty default. The ref32 NaN rule stays: it
+  was in the tested build.
+
 ## 2026-11-25: Final Egg act 2: the real cause (collision list overrun)
 
 - The NaN conversion (2026-11-25 entry below) was not it: the owner's Switch test of 0.5.3-fe1

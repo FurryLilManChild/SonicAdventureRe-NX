@@ -1,4 +1,4 @@
-# SonicAdventureRe-nx 0.5.3 (needs testing)
+# SonicAdventureRe-nx 0.5.4 (needs testing)
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
 [sonic-adventure](https://github.com/reshaped/sonic-adventure) decompilation: the game's own C
@@ -6,7 +6,18 @@ code compiled for the Switch, with a Vulkan renderer. Not an emulator.
 
 No game data is included. The port rebuilds the game from your own disc dumps.
 
-## Faster see-through effects
+## Fixes
+
+- **Final Egg act 2: Sonic no longer gets stuck in the floor around the button platform.** The
+  game keeps a list of 16 nearby solid objects while it keeps a character on the ground, and by
+  that platform there are 17. The original wrote the 17th past the end of the list; on the
+  Dreamcast that did no harm, on the Switch it overwrote how high Sonic's collision sits above his
+  feet, so he sank into the floor and bobbed there. The port's list now holds 64.
+- **Amy's story no longer stops at its end.** After beating Zero (and on resuming her story from
+  there) the game asked for a sound file the Japanese disc doesn't have and stopped. As on the
+  Dreamcast, the scene now plays without it.
+
+## From 0.5.3, if you skipped it: faster see-through effects
 
 - **Translucency costs far less.** The per-pixel way the port draws see-through surfaces (as the
   Dreamcast did) now does much less work on the Switch's GPU for the same picture. In Windy
@@ -68,5 +79,5 @@ doing and your settings.
 
 | File | SHA-256 |
 |---|---|
-| SonicAdventureRe-nx-0.5.3-switch.zip | ZIP_SHA |
+| SonicAdventureRe-nx-0.5.4-switch.zip | ZIP_SHA |
 | SonicAdventureRe-nx.nro | NRO_SHA |

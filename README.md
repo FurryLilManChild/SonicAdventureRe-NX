@@ -1,6 +1,6 @@
 # SonicAdventureRe-nx
 
-Version 0.5.3, needs testing.
+Version 0.5.4, needs testing.
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
 sonic-adventure decompilation (https://github.com/reshaped/sonic-adventure): the game's own

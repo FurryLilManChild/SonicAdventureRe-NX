@@ -1,4 +1,4 @@
-SonicAdventureRe-nx 0.5.3 (needs testing)
+SonicAdventureRe-nx 0.5.4 (needs testing)
 ==========================================
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
