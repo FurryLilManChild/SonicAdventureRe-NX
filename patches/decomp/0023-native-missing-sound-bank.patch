@@ -1,0 +1,63 @@
+diff --git a/src/sound/sound.c b/src/sound/sound.c
+--- a/src/sound/sound.c
++++ b/src/sound/sound.c
+@@ -636,6 +636,14 @@
+     Sint32 sectors;
+ 
+     file = gdFsOpen(name, NULL);
++#ifdef NONMATCHING
++    /* a bank the disc lacks: the Japanese disc has no e_0072.mlt, which
++     * ev0072 (Amy's first scene) loads. the console's reads fail and the
++     * scene plays on without it; LOADER_MUST_READ would stop the game */
++    if (file == NULL) {
++        return;
++    }
++#endif
+     gdFsGetFileSize(file, &size);
+     sectors = SECTORS(size);
+     LOADER_MUST_READ(file, name, sectors, WORK_AREA);
+@@ -650,6 +658,14 @@
+     Sint32 sectors;
+ 
+     file = gdFsOpen(name, NULL);
++#ifdef NONMATCHING
++    /* a bank the disc lacks: the Japanese disc has no e_0072.mlt, which
++     * ev0072 (Amy's first scene) loads. the console's reads fail and the
++     * scene plays on without it; LOADER_MUST_READ would stop the game */
++    if (file == NULL) {
++        return;
++    }
++#endif
+     gdFsGetFileSize(file, &size);
+     sectors = SECTORS(size);
+     LOADER_MUST_READ(file, name, sectors, WORK_AREA);
+@@ -664,6 +680,14 @@
+     Sint32 sectors;
+ 
+     file = gdFsOpen(name, NULL);
++#ifdef NONMATCHING
++    /* a bank the disc lacks: the Japanese disc has no e_0072.mlt, which
++     * ev0072 (Amy's first scene) loads. the console's reads fail and the
++     * scene plays on without it; LOADER_MUST_READ would stop the game */
++    if (file == NULL) {
++        return;
++    }
++#endif
+     gdFsGetFileSize(file, &size);
+     sectors = SECTORS(size);
+     LOADER_MUST_READ(file, name, sectors, WORK_AREA);
+@@ -678,6 +702,14 @@
+     Sint32 sectors;
+ 
+     file = gdFsOpen(name, NULL);
++#ifdef NONMATCHING
++    /* a bank the disc lacks: the Japanese disc has no e_0072.mlt, which
++     * ev0072 (Amy's first scene) loads. the console's reads fail and the
++     * scene plays on without it; LOADER_MUST_READ would stop the game */
++    if (file == NULL) {
++        return;
++    }
++#endif
+     gdFsGetFileSize(file, &size);
+     sectors = SECTORS(size);
+     LOADER_MUST_READ(file, name, sectors, WORK_AREA);

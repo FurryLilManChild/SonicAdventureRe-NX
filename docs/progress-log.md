@@ -2,6 +2,19 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-25: Amy's story stops at her first scene
+
+- Report (a player, 0.5.0, build d94c0b9): after beating Zero, and twice on choosing Amy, the game
+  ends during her opening monologue. Each of the three runs in the log ends the same way:
+  "no file e_0072.mlt on the disc", then "the game stopped: READ e_0072.mlt", stage 29, Amy.
+- Cause: events/ev0072/script.c loads e_0072.mlt, and the Japanese disc has no such file (its
+  E_0071.MLT is followed by none for 0072). On the console the reads fail and the scene plays on;
+  under NONMATCHING, LOADER_MUST_READ stops the game.
+- Fix: patches/decomp/0023-native-missing-sound-bank.patch: sound.c's four bank loaders return
+  when the file won't open (gdfs.c already logs the missing name).
+- The player's Atmosphere crash report (an instruction abort) needs build d94c0b9's ELF, which was
+  not kept: unread.
+
 ## 2026-11-25: Final Egg act 2: the cause, and a fix to test
 
 - Cause, from probes on each triangle polygon_sweep turns at the step where the builds part
