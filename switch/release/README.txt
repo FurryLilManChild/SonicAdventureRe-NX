@@ -1,5 +1,5 @@
-SonicAdventureRe-nx 0.5.4 (needs testing)
-==========================================
+SonicAdventureRe-nx 1.0
+=======================
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
 sonic-adventure decompilation (https://github.com/reshaped/sonic-adventure): the game's own
@@ -10,8 +10,8 @@ rebuilds the game from your own disc dumps the first time it starts.
 
 Status
 ------
-0.5.x means feature-ready but not yet played through from start to finish. Please play, and
-report what goes wrong (see Reporting problems).
+1.0: every story has been played through from start to finish on the Switch. If anything
+still goes wrong, please report it (see Reporting problems).
 
 - Widescreen (16:9) and 60 fps by default, at the Switch's stock clocks.
 - Resolution 1X (640x480), 1.5X or 2X, changed live in the port menu.
@@ -116,7 +116,6 @@ Known issues
   (for one, the bridge before Windy Valley's tornado). EFFECTS FAST, the default, fixes that.
 - Some scenes may not hold 60 fps everywhere.
 - Cutscenes run at 30 fps, as in the original.
-- This build has not been played from start to finish.
 
 Reporting problems
 ------------------

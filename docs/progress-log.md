@@ -2,6 +2,13 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-25: 1.0
+
+- The tester's run of 0.5.4-hs1 (c5ee32a): Gamma's Hot Shelter plays through the long drop and
+  its containers; the tester then finished the rest of the game with nothing more to report.
+- 1.0 is c5ee32a's game as tested, its version string the only change: README, the release
+  README and the notes say every story has been played through.
+
 ## 2026-11-25: Gamma's Hot Shelter crash after the long drop
 
 - Report (a tester, 0.5.4, build 1067ebd): a crash in Hot Shelter act 2 right as Gamma lands

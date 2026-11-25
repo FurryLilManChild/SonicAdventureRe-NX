@@ -1,4 +1,4 @@
-# SonicAdventureRe-nx 0.5.4 (needs testing)
+# SonicAdventureRe-nx 1.0
 
 A native Nintendo Switch port of Sonic Adventure (Dreamcast), built on reshaped's
 [sonic-adventure](https://github.com/reshaped/sonic-adventure) decompilation: the game's own C
@@ -6,8 +6,16 @@ code compiled for the Switch, with a Vulkan renderer. Not an emulator.
 
 No game data is included. The port rebuilds the game from your own disc dumps.
 
-## Fixes
+## 1.0
 
+Testers have now played every story through from start to finish on the Switch. These are the
+fixes since 0.5.3, each found by a player and confirmed fixed on the Switch:
+
+- **Gamma, Hot Shelter: no more crash after the long drop past the train.** The game lists the
+  targets Gamma shoots but never takes one off the list, so a target that unloaded stayed listed
+  after its memory was freed. The containers that open once their targets are down read that
+  freed memory: harmless on the Dreamcast, a crash on the Switch. The port's list now keeps each
+  target's number and whether it has been shot, and holds 256 targets instead of 64.
 - **Final Egg act 2: Sonic no longer gets stuck in the floor around the button platform.** The
   game keeps a list of 16 nearby solid objects while it keeps a character on the ground, and by
   that platform there are 17. The original wrote the 17th past the end of the list; on the
@@ -23,12 +31,11 @@ No game data is included. The port rebuilds the game from your own disc dumps.
   Dreamcast did) now does much less work on the Switch's GPU for the same picture. In Windy
   Valley's tornado, at stock clocks, the GPU's time for a frame went from 11.5 ms to 6.4 ms, and
   the frame rate there from about 41 to 60.
-- **TRANSLUCENCY EFFECTS FAST** is a new setting, and the default for new installs: see-through
-  surfaces stay per pixel, but smoke, dust and sparks are drawn the quick way, which keeps thick
-  smoke and dust (such as the bridge before the tornado) at full speed. ACCURATE and FAST are
-  still there.
-- **If you are updating**, your settings keep the TRANSLUCENCY you had: set EFFECTS FAST in the
-  port menu (Minus and Plus) for the recommended setting.
+- **TRANSLUCENCY EFFECTS FAST** is the default for new installs: see-through surfaces stay per
+  pixel, but smoke, dust and sparks are drawn the quick way, which keeps thick smoke and dust
+  (such as the bridge before the tornado) at full speed. ACCURATE and FAST are still there.
+- **If you are updating** from before 0.5.3, your settings keep the TRANSLUCENCY you had: set
+  EFFECTS FAST in the port menu (Minus and Plus) for the recommended setting.
 
 ## Updating from an earlier version
 
@@ -79,5 +86,5 @@ doing and your settings.
 
 | File | SHA-256 |
 |---|---|
-| SonicAdventureRe-nx-0.5.4-switch.zip | ZIP_SHA |
+| SonicAdventureRe-nx-1.0-switch.zip | ZIP_SHA |
 | SonicAdventureRe-nx.nro | NRO_SHA |
