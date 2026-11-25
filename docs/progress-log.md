@@ -2,6 +2,22 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-25: Final Egg act 2: the real cause (collision list overrun)
+
+- The NaN conversion (2026-11-25 entry below) was not it: the owner's Switch test of 0.5.3-fe1
+  still sank Sonic. The game cuts each turn to 16 bits, so -2^31 and 0 are the same turn.
+- Two runs (x86 and qemu-aarch64, both through tools/ref32, Sonic dropped at 1123.49 -655 -807.17)
+  with probes on triangle 2415: at the step where they part, polygon_sweep gets the same input on
+  both except the ball, 4.0 lower on ARM in player_collide_world's second pass. Nothing between the
+  passes moves work->pos or normal on purpose.
+- The first pass sweeps 17 objects (2026-11-25 probes: 17 "sweep in" before the reversed second
+  pass). player_collide_world and its pinball twin keep candidates[16] and sorted[16] and write the
+  17th past the end: on the console and x86 into something harmless, on AArch64 into the lift of
+  Sonic's ball (normal, 4.0 over his feet).
+- Fix: patches/decomp/0024-native-collide-entries.patch: in our builds both lists hold 64, and a
+  pass stops at 64 with a note in the log. Not yet tested on the Switch.
+- The ref32 NaN rule stays for now (removing it means a full rebuild); harmless either way.
+
 ## 2026-11-25: Amy's story stops at her first scene
 
 - Report (a player, 0.5.0, build d94c0b9): after beating Zero, and twice on choosing Amy, the game

@@ -1,0 +1,71 @@
+diff --git a/src/player/player.c b/src/player/player.c
+--- a/src/player/player.c
++++ b/src/player/player.c
+@@ -270,6 +270,29 @@
+ static Uint32 player_collide_ground(struct task_work *work,
+                                     struct task_motion *motion,
+                                     struct player *record);
++/* player_collide_world and its pinball twin keep 16 nearby objects and
++ * write past them when more are near (17 by Final Egg's button platform:
++ * the gate's parts and the floor around it). On the console what that
++ * overwrites is harmless; on AArch64 it was the lift of Sonic's ball over
++ * his feet, which sank him into that floor. Our builds keep 64 and skip,
++ * with a note in the log (each new most), any past that */
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++#define COLLIDE_ENTRIES 64
++#define COLLIDE_FULL(count)                                                   \
++    if ((count) >= COLLIDE_ENTRIES) {                                         \
++        static int told_;                                                     \
++        if (world_count > told_) {                                            \
++            told_ = world_count;                                              \
++            native_hook_note("objects to collide with", world_count,         \
++                             COLLIDE_ENTRIES);                                \
++        }                                                                     \
++        break;                                                                \
++    }
++#else
++#define COLLIDE_ENTRIES 16
++#define COLLIDE_FULL(count)
++#endif
++
+ static Uint32 player_collide_world(struct task_work *work,
+                                    struct task_motion *motion,
+                                    struct player *record);
+@@ -4039,8 +4062,8 @@
+     NJS_VECTOR normal;
+     NJS_VECTOR position;
+     NJS_POINT3 old_pos;
+-    struct world_object candidates[16];
+-    struct world_object sorted[16];
++    struct world_object candidates[COLLIDE_ENTRIES];
++    struct world_object sorted[COLLIDE_ENTRIES];
+     struct polygon_ball *ball;
+     struct world_object *world;
+     struct world_object *entry;
+@@ -4128,6 +4151,7 @@
+     saved = 0;
+     count = 0;
+     for (i = 0; i < world_count; i++, world++) {
++        COLLIDE_FULL(count);
+         if ((world->flags & WORLD_LIQUID) &&
+             PLAYER_VARS(work)->character != CHARACTER_E102) {
+             continue;
+@@ -6098,8 +6122,8 @@
+     NJS_VECTOR normal;
+     NJS_VECTOR position;
+     NJS_POINT3 old_pos;
+-    struct world_object candidates[16];
+-    struct world_object sorted[16];
++    struct world_object candidates[COLLIDE_ENTRIES];
++    struct world_object sorted[COLLIDE_ENTRIES];
+     NJS_PLANE plane;
+     NJS_POINT3 point;
+     struct world_object swap;
+@@ -6169,6 +6193,7 @@
+     saved = 0;
+     count = 0;
+     for (i = 0; i < world_count; i++, world++) {
++        COLLIDE_FULL(count);
+         if ((world->flags & WORLD_LIQUID) &&
+             PLAYER_VARS(work)->character != CHARACTER_E102) {
+             continue;
