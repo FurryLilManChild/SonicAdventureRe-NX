@@ -2,6 +2,21 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-25: Gamma's Hot Shelter crash after the long drop
+
+- Report (a tester, 0.5.4, build 1067ebd): a crash in Hot Shelter act 2 right as Gamma lands
+  after the long drop past the train, every time; once after Emerald Coast (no report for that).
+- Crash report: data abort at linked 0x5005264cc, target_cleared (src/object/target.c:152),
+  from shelter_container_break_when_cleared (modules/stg12/container.c:189); the work pointer it
+  read was 0x018c8779d0000000, nowhere in the game's memory.
+- Cause: target_start lists each target and nothing takes one off. A target that unloads stays
+  listed, freed; one that loads again is listed again (64 at most, the 65th written past the end).
+  The containers read every listed target's work; on the console freed memory reads without a
+  fault, here its pointer can be anything.
+- Fix: patches/decomp/0025-native-target-records.patch: in our builds the list keeps each
+  target's id and whether it is down (marked when it is shot, newest entry for the task), the
+  check reads those, and the list holds 256, noting any past that. Not yet tested.
+
 ## 2026-11-25: 0.5.4: the Final Egg and Amy fixes, tested
 
 - The owner's tests of 0.5.3-fe3 (e0cb6a8): Sonic stands on the floor around Final Egg's button

@@ -1,0 +1,93 @@
+diff --git a/src/object/target.c b/src/object/target.c
+--- a/src/object/target.c
++++ b/src/object/target.c
+@@ -17,7 +17,18 @@
+ #include "system/util.h"
+ 
+ /* the most targets a stage can start: the size of target_tasks */
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* the game never takes a target off its list: one that unloads (E-102 far
++ * away) stays there, freed, and one that loads again is listed again. The
++ * console reads the freed task's memory without faulting; here that memory
++ * can hold anything, and Hot Shelter act 2's containers crashed on it. Our
++ * builds keep each target's id and whether it is down in the list itself,
++ * read those, and list up to 256, noting any past that in the log */
++#define TARGET_COUNT 256
++#define TARGET_RECORDS
++#else
+ #define TARGET_COUNT 64
++#endif
+ 
+ #define TARGET_DOWN 0x100 /* in work->flags: shot down */
+ 
+@@ -46,6 +57,24 @@
+ 
+ static Sint16 target_count;
+ static struct task *target_tasks[TARGET_COUNT];
++#ifdef TARGET_RECORDS
++static int target_ids[TARGET_COUNT];
++static Uint8 target_downs[TARGET_COUNT];
++
++/* the newest entry for the task: an older one with the same address is a
++ * target that unloaded, kept as it was */
++static void target_record_down(struct task *task)
++{
++    int i;
++
++    for (i = target_count - 1; i >= 0; i--) {
++        if (target_tasks[i] == task) {
++            target_downs[i] = TRUE;
++            return;
++        }
++    }
++}
++#endif
+ 
+ static void target_draw(struct task *task)
+ {
+@@ -92,6 +121,9 @@
+             record->flags |= LOCKON_HIT;
+             lockon_release(task);
+             work->flags |= TARGET_DOWN;
++#ifdef TARGET_RECORDS
++            target_record_down(task);
++#endif
+             VARS(work)->burst = BURST_TIME;
+             VARS(work)->puff = PUFF_TIME;
+             work->mode = TARGET_BURST;
+@@ -133,6 +165,14 @@
+     if (child != NULL) {
+         child->work->pos = task->work->pos;
+     }
++#ifdef TARGET_RECORDS
++    if (target_count >= TARGET_COUNT) {
++        native_hook_note("targets started", target_count + 1, TARGET_COUNT);
++        return;
++    }
++    target_ids[target_count] = (int)task->work->scl.x;
++    target_downs[target_count] = (task->work->flags & TARGET_DOWN) != 0;
++#endif
+     target_tasks[target_count++] = task;
+ }
+ 
+@@ -144,6 +184,20 @@
+     int i;
+ 
+     count = 0;
++#ifdef TARGET_RECORDS
++    (void)work;
++    (void)its_id;
++    for (i = 0; i < target_count; i++) {
++        if (target_ids[i] != id) {
++            continue;
++        }
++        if (!target_downs[i]) {
++            return FALSE;
++        }
++        count++;
++    }
++    return count != 0;
++#endif
+     for (i = 0; i < target_count; i++) {
+         work = target_tasks[i]->work;
+         /* @hack spelling: the placed id through a local, which takes a
