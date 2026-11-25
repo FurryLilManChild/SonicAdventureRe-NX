@@ -1,0 +1,67 @@
+diff --git a/src/player/player.c b/src/player/player.c
+--- a/src/player/player.c
++++ b/src/player/player.c
+@@ -3801,6 +3801,15 @@ static void player_slide_along_wall(struct task_work *work,
+     motion->aim.y = work->ang.y;
+ }
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* a port's trace of player 0 in Final Egg: where it is, its speed, its modes
++ * and what it stands on, each collision step. bare.c's does nothing */
++void native_hook_player_trace(int stage, int act, const Float *pos,
++                              const Float *speed, int mode, int action,
++                              int flags, Uint32 ground_flags, void *ground,
++                              void *ground_step, const Float *ground_speed);
++#endif
++
+ int player_collide(struct task_work *work, struct task_motion *motion,
+                    struct player *record)
+ {
+@@ -3820,6 +3829,18 @@ int player_collide(struct task_work *work, struct task_motion *motion,
+     int ret;
+     void (*calc_vector)(NJS_MATRIX *, NJS_VECTOR *, NJS_VECTOR *);
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    if (stage_current == 10 && record == player_get(0)) {
++        struct task *g = record->ground_task;
++        native_hook_player_trace(
++            stage_current, act_current, &work->pos.x, &motion->speed.x,
++            work->mode, record->anim.action, work->flags, record->ground_flags,
++            g, g != NULL ? (void *)g->step : NULL,
++            g != NULL && g->force != NULL
++                ? &((struct task_force *)g->force)->speed.x
++                : NULL);
++    }
++#endif
+     record->wall_normal.x = record->wall_normal.y = record->wall_normal.z =
+         0.0F;
+     record->last_ground_flags = record->ground_flags;
+diff --git a/engine/native/bare.c b/engine/native/bare.c
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -154,6 +154,25 @@ int native_hook_trials_open(void)
+     return 0;
+ }
+ 
++void native_hook_player_trace(int stage, int act, const float *pos,
++                              const float *speed, int mode, int action,
++                              int flags, unsigned int ground_flags,
++                              void *ground, void *ground_step,
++                              const float *ground_speed)
++{
++    (void)stage;
++    (void)act;
++    (void)pos;
++    (void)speed;
++    (void)mode;
++    (void)action;
++    (void)flags;
++    (void)ground_flags;
++    (void)ground;
++    (void)ground_step;
++    (void)ground_speed;
++}
++
+ int native_hook_talk(void)
+ {
+     return 0;

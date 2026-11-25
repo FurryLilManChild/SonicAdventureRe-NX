@@ -2,6 +2,21 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-24: Final Egg act 2: Sonic stuck at a floor (diagnostic)
+
+- Report (owner and a player, every time there): in Final Egg act 2, landing on one spot of the
+  floor around the platform with the button (the floor folds away when the button is pressed, and
+  the platform rises), Sonic sinks, is pushed up and back about once a second, and barely answers
+  the stick. Not in the Dreamcast game nor any DX. The log of that run: stage 10 act 1, no heap
+  damage. The video alone does not say what he stands on.
+- Checked and cleared: elevator2's vars (16 bytes natively) fit union task_vars, whose void *p[3]
+  makes it 24; set entry angles are Sint16, sign-extended.
+- Patch 0022: player_collide calls native_hook_player_trace for player 0 in stage 10 (bare.c's does
+  nothing); nx_main.c logs a "trace" line when the ground changes, on a drop or rise of more than 4
+  units in a step, when the player barely moves while its speed says it moves, and every 30 steps:
+  position, speed, mode, action, flags, the ground task and its step (as linked, for addr2line) and
+  the ground's force.
+
 ## 2026-11-24: release 0.5.3 prepared
 
 - 8b91d32's [gpu] lines, the tornado standing still on ACCURATE at stock clocks: 6.4 ms of device

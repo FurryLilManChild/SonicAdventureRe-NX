@@ -137,6 +137,54 @@ void __wrap_native_hook_heap_damage(const char *what, unsigned long at, unsigned
     fflush(stderr);
 }
 
+// a diagnostic (patch 0022): player 0 in Final Egg, each collision step. A line goes out when
+// what the player stands on changes, when it drops or rises more than 4 units in one step, when it
+// moves less than a tenth of a unit while its speed says it is moving (stuck), and otherwise every
+// 30 steps. Ground and step addresses are as linked, for addr2line against the full ELF
+void __wrap_native_hook_player_trace(int stage, int act, const float *pos, const float *speed, int mode,
+                                     int action, int flags, unsigned int ground_flags, void *ground,
+                                     void *ground_step, const float *ground_speed)
+{
+    static void *last_ground;
+    static float last[3];
+    static unsigned long count, said;
+    static int last_act = -1;
+    u64 shift = nx_link_window_number - (u64)native_domain_base;
+#define LINKED(p) ((p) ? (u64)(p) + shift : 0)
+    float dx = pos[0] - last[0], dy = pos[1] - last[1], dz = pos[2] - last[2];
+    float moved = dx * dx + dy * dy + dz * dz;
+    float fast = speed[0] * speed[0] + speed[1] * speed[1] + speed[2] * speed[2];
+    const char *why = NULL;
+
+    count++;
+    if (act != last_act)
+        why = "act";
+    else if (ground != last_ground)
+        why = "ground";
+    else if (dy < -4.0f || dy > 4.0f)
+        why = dy < 0 ? "drop" : "rise";
+    else if (fast > 1.0f && moved < 0.01f)
+        why = "stuck";
+    else if (count - said >= 30)
+        why = "every 30";
+    if (why != NULL && count - said >= (why[0] == 's' ? 10 : 1)) {
+        said = count;
+        fprintf(stderr,
+                "trace %s: stage %d act %d step %lu: pos %.2f %.2f %.2f (moved %.2f %.2f %.2f) speed %.2f %.2f "
+                "%.2f mode %d action %d flags %#x; ground %#lx step %#lx flags %#x speed %.2f %.2f %.2f\n",
+                why, stage, act, count, pos[0], pos[1], pos[2], dx, dy, dz, speed[0], speed[1], speed[2], mode,
+                action, flags & 0xffff, LINKED(ground), LINKED(ground_step), ground_flags,
+                ground_speed ? ground_speed[0] : 0.0f, ground_speed ? ground_speed[1] : 0.0f,
+                ground_speed ? ground_speed[2] : 0.0f);
+    }
+#undef LINKED
+    last_ground = ground;
+    last_act = act;
+    last[0] = pos[0];
+    last[1] = pos[1];
+    last[2] = pos[2];
+}
+
 void __wrap_native_hook_note(const char *what, int n, int limit)
 {
     fprintf(stderr, "note: %s %d (limit %d), %.1f s in\n", what, n, limit, seconds());
