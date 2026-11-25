@@ -2,6 +2,24 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-25: Final Egg act 2: the cause, and a fix to test
+
+- Cause, from probes on each triangle polygon_sweep turns at the step where the builds part
+  (Sonic dropped at 1123.49 -655 -807.17; every input to the sweeps bit for bit the same on both):
+  for a flat triangle the SDK's atan2f(0, 0) is a NaN, and polygon_sweep turns by
+  -(Angle)(that * ANGLE_PER_RADIAN). x86's CVTTSS2SI gives -2^31 for a NaN; AArch64's FCVTZS gives
+  0. With 0 the ARM build counts gate triangle 2415 as hit, which x86 does not; Sonic is snapped
+  to the floor without ground, falls about 65 steps, lands, and loses it again.
+- Ruled out on the way: the NaN of vector_angle (only sonic_sway_step's, which is cosmetic), the
+  pointer lowering (x86 built through tools/ref32 with domain 0x100000000 plays the spot), DAZ, round
+  to nearest, and play_math's FSRRA, FSQRT, FMAC, FIPR, FTRV and FSCA (two million operands, the
+  same bits on x86 and under qemu-aarch64).
+- Fix: tools/ref32/ref32_int.py, on retargeting, gives each float or double converted to a 32-bit
+  integer -2^31 for a NaN, as x86 does and, we expect, the console's FTRC (not yet checked against
+  the SH-4 manual). Out of range FCVTZS already saturates as FTRC does. It covers each such
+  conversion in the game (about 4,700), not only the sweep's. Checked on a test module under
+  qemu-aarch64; not yet run in the game: the owner tests the Switch build.
+
 ## 2026-11-24: Final Egg act 2: Sonic stuck at a floor (diagnostic)
 
 - Report (owner and a player, every time there): in Final Egg act 2, landing on one spot of the

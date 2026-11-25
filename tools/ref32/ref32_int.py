@@ -87,6 +87,36 @@ def lower_line(line):
     return line
 
 
+# x86's CVTTSS2SI and the console's FTRC give -2^31 for a NaN; AArch64's FCVTZS gives 0. Each
+# float or double converted to a 32-bit integer takes -2^31 for a NaN, as it would on the console.
+# Out of range, FCVTZS saturates as FTRC does. The game turns NaN angles into turns this way:
+# polygon_sweep's flat triangles, where atan2f(0, 0) is a NaN, sank Sonic into Final Egg's gate
+FTRC_LINE = re.compile(r'^(?P<pad>\s*)(?P<dst>%[-\w.$]+) = call i32 @llvm\.experimental\.constrained\.fptosi\.i32\.(?P<fty>f32|f64)\((?P<ty>float|double) (?P<value>[^,]+), metadata !"fpexcept\.ignore"\)(?P<attrs>(?: #\d+)?)(?P<rest>(?:,.*)?)$')
+FCMP_DECLARE = {
+    'f32': 'declare i1 @llvm.experimental.constrained.fcmp.f32(float, float, metadata, metadata)',
+    'f64': 'declare i1 @llvm.experimental.constrained.fcmp.f64(double, double, metadata, metadata)',
+}
+
+
+def ftrc_line(line, used):
+    m = FTRC_LINE.match(line)
+    if not m:
+        if 'constrained.fptosi.i32' in line and not line.lstrip().startswith('declare'):
+            raise SystemExit(f'ref32_int: a conversion it has no rule for: {line.strip()[:160]}')
+        return line
+    pad, dst, fty, ty, value = m['pad'], m['dst'], m['fty'], m['ty'], m['value']
+    attrs, rest = m['attrs'] or '', m['rest'] or ''
+    used.add(fty)
+    base = dst[1:].strip('"')
+    nan = f'%ftrc.nan.{base}'
+    raw = f'%ftrc.raw.{base}'
+    return (f'{pad}{nan} = call i1 @llvm.experimental.constrained.fcmp.{fty}({ty} {value}, {ty} {value}, '
+            f'metadata !"uno", metadata !"fpexcept.ignore"){attrs}{rest}\n'
+            f'{pad}{raw} = call i32 @llvm.experimental.constrained.fptosi.i32.{fty}({ty} {value}, '
+            f'metadata !"fpexcept.ignore"){attrs}{rest}\n'
+            f'{pad}{dst} = select i1 {nan}, i32 -2147483648, i32 {raw}{rest}')
+
+
 def main():
     path = sys.argv[1]
     retarget = None
@@ -94,6 +124,7 @@ def main():
         retarget = sys.argv[3]
     lines = open(path, encoding='utf-8').read().split('\n')
     out = []
+    used = set()
     for line in lines:
         if retarget and line.startswith('target triple = '):
             line = f'target triple = "{retarget}"'
@@ -104,8 +135,13 @@ def main():
             line = re.sub(r' "(?:target-cpu|target-features|tune-cpu)"="[^"]*"', '', line)
         else:
             line = lower_line(line)
+            if retarget:
+                line = ftrc_line(line, used)
         out.append(line)
     text = '\n'.join(out)
+    for fty in sorted(used):
+        if f'declare i1 @llvm.experimental.constrained.fcmp.{fty}(' not in text:
+            text += '\n' + FCMP_DECLARE[fty] + '\n'
     if 'addrspace(271)' in text:
         raise SystemExit('ref32_int: a reference was left')
     open(path, 'w', encoding='utf-8').write(text)
