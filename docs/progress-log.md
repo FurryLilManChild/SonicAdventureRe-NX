@@ -8,6 +8,15 @@ Newest first. One entry per session, with evidence.
   Sonic until 50 rings and a transform button; rings drain once Super; times kept apart.
   docs/super-sonic-trial-plan.md has it, the SADX mods' approaches (read only, no licence
   posted, none of their code used) and phase 1's findings.
+- Phase 2 proof (patch 0027, sonic.c, port builds only): in a trial (player_record NULL),
+  Emerald Coast act 1, the action button in SONIC_JUMP with 50 rings turns Sonic super:
+  the super flag, super_aura_start and sonic_super_start's tasks as PLAYER_MODE_SUPER
+  makes them, SUPERSONIC.PRS loaded into super_sonic_texlist, the super model's welds on,
+  MUSIC_SPRSONIC. He keeps his own modes, drawn from a copy of sonic_actions with
+  super_sonic_object in each row on his own model, with super textures. A ring each 60
+  steps; at 0, or the button again, he turns back (his rows, welds off, music restored).
+  sonic_super_destroy's @bug (resist.x and air_resist put back into top_speed and
+  ground_accel) repaired for port builds.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.

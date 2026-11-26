@@ -1,0 +1,210 @@
+--- a/src/player/sonic.c
++++ b/src/player/sonic.c
+@@ -41,6 +41,10 @@
+ #include "stg09/sonic_actions.h"
+ #include "system/frame.h"
+ #include "system/pad.h"
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++#include "sound/stream.h"
++void native_hook_note(const char *what, int n, int limit);
++#endif
+ #include "system/task.h"
+ #include "system/texture.h"
+ #include "system/util.h"
+@@ -1226,6 +1230,141 @@
+ }
+ 
+ /* choose his mode for this step, then move, pose and draw him by it */
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* the port's Super Sonic in trial mode (SonicAdventureRe-nx, docs/
++ * super-sonic-trial-plan.md). with TRIAL_SUPER_RINGS rings or more, the
++ * action button in a jump turns him super; again, or with no rings left,
++ * he turns back. while super he keeps his own modes and moves, drawn on
++ * super Sonic's model with super Sonic's textures, and loses a ring each
++ * TRIAL_SUPER_DRAIN steps, as the last boss's fight drains them. the first
++ * test: Emerald Coast's first act in a trial only */
++#define TRIAL_SUPER_RINGS 50
++#define TRIAL_SUPER_DRAIN 60
++#define SONIC_ACTION_ROWS (sizeof sonic_actions / sizeof sonic_actions[0])
++
++static struct player_action trial_super_actions[SONIC_ACTION_ROWS];
++static NJS_ACTION trial_super_rows[SONIC_ACTION_ROWS];
++static Bool trial_super_made;
++static Bool trial_super_textures;
++static Bool trial_super_on;
++static int trial_super_steps;
++
++static Bool trial_super_here(void)
++{
++    return player_record == NULL &&
++           stage_get_stage_act() == STAGE_ACT(STAGE_BEACH, 0);
++}
++
++/* sonic_actions again, with super Sonic's model in each row that plays on
++ * Sonic's own (the two share his nodes, as super Sonic's rows that play
++ * Sonic's motions show) */
++static void trial_super_make(void)
++{
++    Uint32 i;
++
++    for (i = 0; i < SONIC_ACTION_ROWS; i++) {
++        trial_super_actions[i] = sonic_actions[i];
++        if (sonic_actions[i].action != NULL &&
++            sonic_actions[i].action->object ==
++                sonic_stand_action.object) {
++            trial_super_rows[i].object = &super_sonic_object;
++            trial_super_rows[i].motion = sonic_actions[i].action->motion;
++            trial_super_actions[i].action = &trial_super_rows[i];
++        }
++    }
++    trial_super_made = TRUE;
++}
++
++static void trial_super_welds(int kind)
++{
++    struct weld *weld;
++
++    for (weld = sonic_welds; weld->base != NULL; weld++) {
++        if (weld->base == &super_sonic_object) {
++            weld->kind = kind;
++        }
++    }
++}
++
++static void trial_super_begin(struct task_work *work, struct player *record)
++{
++    struct task *task;
++
++    if (!trial_super_made) {
++        trial_super_make();
++    }
++    if (!trial_super_textures) {
++        texture_load_pvm("SUPERSONIC", &super_sonic_texlist);
++        trial_super_textures = TRUE;
++    }
++    record->upgrades |= PLAYER_SONIC_SUPER;
++    task = task_create(TASK_WORK, 2, super_aura_start);
++    if (task != NULL) {
++        PLAYER_VARS(task->work)->player = PLAYER_VARS(work)->player;
++    }
++    task = task_create(TASK_EXTRA, 2, sonic_super_start);
++    if (task != NULL) {
++        SUPER(task)->player = PLAYER_VARS(work)->player;
++    }
++    trial_super_welds(WELD_TO_A);
++    record->anim.actions = trial_super_actions;
++    trial_super_on = TRUE;
++    trial_super_steps = 0;
++    stream_request_and_save_music(MUSIC_SPRSONIC);
++    native_hook_note("trial super: on, rings", ring_count(), 0);
++}
++
++/* the super form ends: his own rows, welds and music again. the super task
++ * puts back his constants as it ends, on its next step */
++static void trial_super_end(struct player *record)
++{
++    record->upgrades &= ~PLAYER_SONIC_SUPER;
++    trial_super_welds(WELD_OFF);
++    record->anim.actions = sonic_actions;
++    trial_super_on = FALSE;
++    stream_restore_music();
++    native_hook_note("trial super: off, rings", ring_count(), 0);
++}
++
++static void trial_super_step(struct task_work *work, struct task_motion *motion,
++                             struct player *record)
++{
++    Bool pressed;
++
++    (void)motion;
++    if (trial_super_on && !(record->upgrades & PLAYER_SONIC_SUPER)) {
++        /* something else ended it, as a fall down does */
++        trial_super_end(record);
++        return;
++    }
++    if (!trial_super_here() || PLAYER_VARS(work)->player != 0) {
++        return;
++    }
++    pressed = work->mode == SONIC_JUMP &&
++              PAD_BUTTONS(pad_records[PLAYER_VARS(work)->player].press,
++                          pad_action_buttons);
++    if (!trial_super_on) {
++        if (pressed && ring_count() >= TRIAL_SUPER_RINGS) {
++            trial_super_begin(work, record);
++        }
++        return;
++    }
++    if (pressed) {
++        trial_super_end(record);
++        return;
++    }
++    if (++trial_super_steps >= TRIAL_SUPER_DRAIN) {
++        trial_super_steps = 0;
++        if (ring_count() > 0) {
++            ring_add(-1);
++        }
++    }
++    if (ring_count() <= 0) {
++        trial_super_end(record);
++    }
++}
++#endif
++
+ void sonic_step(struct task *task)
+ {
+     struct task_work *work = task->work;
+@@ -1250,6 +1389,9 @@
+     } else if (work->mode != SONIC_DOWN) {
+         sonic_choose_mode(work, motion, record);
+     }
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    trial_super_step(work, motion, record);
++#endif
+     /* his shape's attack and guard levels: the highest while he's
+      * invincible or super, raised while he attacks, and 0 at rest */
+     if (work->collision != NULL) {
+@@ -4252,6 +4394,16 @@
+     player_free(PLAYER_VARS(work)->player);
+     sound_stop_id((int)work);
+     texture_release_character(CHARACTER_SONIC);
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    if (trial_super_textures) {
++        njReleaseTexture(&super_sonic_texlist);
++        trial_super_textures = FALSE;
++    }
++    if (trial_super_on) {
++        trial_super_welds(WELD_OFF);
++        trial_super_on = FALSE;
++    }
++#endif
+ }
+ 
+ /* his shape's center: center_y above his feet, turned with him */
+@@ -4296,7 +4448,11 @@
+         action = record->anim.current;
+     }
+     if (!(TASK_TIMER(work) & BLINK_HIDDEN)) {
+-        if (action >= ACTION_SUPER_STAND && action <= ACTION_SUPER_BALL) {
++        if ((action >= ACTION_SUPER_STAND && action <= ACTION_SUPER_BALL)
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++            || trial_super_on
++#endif
++        ) {
+             njSetTexture(&super_sonic_texlist);
+         } else {
+             njSetTexture(&sonic_texlist);
+@@ -7457,8 +7613,14 @@
+      * top_speed and ground_accel (FMOV.S at 0x8c0ba198, 0x8c0ba1a0), not
+      * where sonic_super_start read them (0x8c0ba246, 0x8c0ba250). his
+      * resist.x and air_resist stay as super Sonic's */
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    /* repairs the bug above: Sonic turns back in the port's trial */
++    record->consts.resist.x = super->resist_x;
++    record->consts.air_resist = super->air_resist;
++#else
+     record->consts.top_speed = super->resist_x;
+     record->consts.ground_accel = super->air_resist;
++#endif
+     record->consts.air_accel = super->air_accel;
+     record->consts.center_y = SONIC_CENTER_Y;
+ }
