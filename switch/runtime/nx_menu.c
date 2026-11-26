@@ -124,6 +124,7 @@ int __wrap_native_hook_trials_open(void)
 // the game for a few seconds (nx_overlay.c)
 static volatile u64 field_tick, save_request_tick;
 static volatile int field_can, save_request;
+static int menu_can_save; // can_save_now when the menu opened (the game waits while it shows)
 volatile int nx_save_result; // 1 saved, -1 the card refused it
 volatile u64 nx_save_until;  // the system tick the result shows until
 
@@ -380,7 +381,7 @@ const char *nx_menu_hint(void)
     }
     switch (cursor) {
     case ITEM_SAVE:
-        return can_save_now() ? "A SAVES YOUR STORY HERE" : "ADVENTURE AREAS IN A STORY ONLY";
+        return menu_can_save ? "A SAVES YOUR STORY HERE" : "ADVENTURE AREAS IN A STORY ONLY";
     case ITEM_CONTROLS:
         return "REMAP THE BUTTONS";
     case ITEM_SIZE:
@@ -493,7 +494,11 @@ int native_menu_step(void)
         cursor = ITEM_RESUME;
         page = PAGE_MAIN;
         quit_armed = 0;
-        fprintf(stderr, "menu: open (the game waits)\n");
+        menu_can_save = can_save_now();
+        fprintf(stderr, "menu: open (the game waits); save now %s (last field frame %lld ms ago, it said %s)\n",
+                menu_can_save ? "possible" : "not here",
+                field_tick ? (long long)((armGetSystemTick() - field_tick) * 1000 / armGetSystemTickFreq()) : -1LL,
+                field_can ? "it may save" : "it may not save");
         return 1;
     }
     u64 down = 0, held = 0;
@@ -550,7 +555,7 @@ int native_menu_step(void)
             return 0;
         }
         if (cursor == ITEM_SAVE) {
-            if (!can_save_now()) {
+            if (!menu_can_save) {
                 fprintf(stderr, "menu: save now: not here\n");
                 return 1;
             }

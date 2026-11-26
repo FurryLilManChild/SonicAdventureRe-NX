@@ -18,6 +18,10 @@ Newest first. One entry per session, with evidence.
 - The port menu's SAVE NOW (after RESUME): only while a field frame said it may save in the
   last quarter second, else its hint says adventure areas only. A closes the menu; the next
   field frame saves; SAVED (or SAVE FAILED) shows at the top left for 3 seconds.
+- The owner's test (83c659d) in Station Square: "save now: not here" five times. The menu
+  checked the last field frame's age while it showed, and the game waits while it shows, so the
+  quarter second had passed by the time the cursor reached SAVE NOW. The check is now made once
+  as the menu opens, and logged with the frame's age and the game's own answer.
 
 ## 2026-11-25: The Chao gardens, and their messages in English
 
