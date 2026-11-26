@@ -2,6 +2,16 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-26: Super Sonic in trial mode, plan and phase 1
+
+- The owner's design: a Super Sonic slot on the trial wheel (Sonic's stages and Perfect Chaos);
+  Sonic until 50 rings and a transform button; rings drain once Super; times kept apart.
+  docs/super-sonic-trial-plan.md has it, the SADX mods' approaches (read only, no licence
+  posted, none of their code used) and phase 1's findings.
+- Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
+  (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
+  in SONIC_JUMP; trial records have no room in the save.
+
 ## 2026-11-26: 1.0, with SAVE NOW and the gardens in English
 
 - The owner's test of b959846: SAVE NOW saved in Station Square; the upgrade was kept after a

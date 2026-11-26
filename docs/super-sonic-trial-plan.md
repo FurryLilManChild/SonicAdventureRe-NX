@@ -102,6 +102,29 @@ Their ways of solving things, to check against our code:
    tuning. Mark plays each act. This is likely the longest phase.
 5. **Docs and release.**
 
+## Phase 1 findings (2026-11-26)
+
+- **The data is there.** The native build links every program at once, each with its own data
+  and bss (engine/native/loads.c); reading a module only puts its starting data back. So
+  B_CHAOS7's Super Sonic model, actions and effects (super_aura_start and the rest) are in the
+  image in every stage, and sonic.c already reaches them by name. The Dreamcast's one-module
+  limit doesn't apply on the Switch.
+- **Textures:** super_sonic_texlist, filled from SUPERSONIC.PVM by chaos7_act_textures
+  (texture.c's list for Chaos 7's act). In another stage it must be loaded by hand (and
+  released when the stage ends).
+- **Drawing:** sonic_draw picks super_sonic_texlist for actions ACTION_SUPER_STAND to
+  ACTION_SUPER_BALL, and each action row names its model (super_sonic_object for Super's
+  rows). Super's rows play Sonic's own motions for spring, fall and ball on Super's model, so
+  the two share a skeleton (SONIC_NODES). For Sonic's full move set while Super: a second copy
+  of the action table with Super's model in Sonic's rows, and the texture choice by the super
+  flag instead of the action number.
+- **Transform button:** Sonic's jump (SONIC_JUMP) never reads the action button, so the action
+  button in the air is free, as the mod uses it.
+- **Music:** MUSIC_SPRSONIC is the Super Sonic theme (src/sound/stream.h).
+- **Trial times:** the save keeps fixed records per character (src/save/save.h:
+  SAVE_STAGES 32, Sonic's ten first), with no room for an eighth. Super Sonic's go in a file
+  of the port's own.
+
 ## Still open (for later phases)
 
 - Which button transforms. Sonic's action button is already used in the air (homing attack is
