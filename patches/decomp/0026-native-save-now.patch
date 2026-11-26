@@ -1,0 +1,63 @@
+--- a/src/stage/stage.c
++++ b/src/stage/stage.c
+@@ -1226,6 +1226,30 @@
+     return;
+ }
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* a host's "save now" (SonicAdventureRe-nx's port menu): each frame an
++ * adventure field plays in a story, the host learns whether it may save
++ * there, and when it asks, the story is saved as a character notice saves
++ * it, at the field and its last entrance */
++int native_hook_save_now(int can);
++void native_hook_save_done(int result);
++
++static void field_save_now(void)
++{
++    int stage = stage_get_stage_act() >> 8;
++    int can = player_record != NULL && player_record->section >= 0 &&
++              !event_in_control() && stage >= STAGE_STATION_SQUARE &&
++              stage <= STAGE_PAST;
++
++    if (native_hook_save_now(can) && can) {
++        player_record->stage_act = stage_get_stage_act();
++        /* NOLINTNEXTLINE(bugprone-signed-char-misuse) */
++        player_record->entrance = stage_get_entrance();
++        native_hook_save_done(save_write_wait());
++    }
++}
++#endif
++
+ static enum stage_group group(void)
+ {
+     return stage_group();
+@@ -2034,6 +2058,9 @@
+         }
+         break;
+     case STAGE_PLAY:
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++        field_save_now();
++#endif
+         story_step();
+         if (story_ended) {
+             stage_end(STAGE_END_CLEAR);
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -154,6 +154,17 @@
+     return 0;
+ }
+ 
++int native_hook_save_now(int can)
++{
++    (void)can;
++    return 0;
++}
++
++void native_hook_save_done(int result)
++{
++    (void)result;
++}
++
+ void native_hook_player_trace(int stage, int act, const float *pos,
+                               const float *speed, int mode, int action,
+                               int flags, unsigned int ground_flags,

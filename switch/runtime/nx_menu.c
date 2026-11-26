@@ -119,6 +119,42 @@ int __wrap_native_hook_trials_open(void)
     return nx_trials_open;
 }
 
+// SAVE NOW (patch 0026): each frame an adventure field plays in a story the game says whether it
+// may save there; the menu's request is taken on the next such frame, and the result shows over
+// the game for a few seconds (nx_overlay.c)
+static volatile u64 field_tick, save_request_tick;
+static volatile int field_can, save_request;
+volatile int nx_save_result; // 1 saved, -1 the card refused it
+volatile u64 nx_save_until;  // the system tick the result shows until
+
+static int can_save_now(void)
+{
+    return field_can && field_tick && armGetSystemTick() - field_tick < armGetSystemTickFreq() / 4;
+}
+
+int __wrap_native_hook_save_now(int can)
+{
+    u64 now = armGetSystemTick();
+    field_tick = now;
+    field_can = can;
+    if (!save_request || !can)
+        return 0;
+    save_request = 0;
+    if (now - save_request_tick > armGetSystemTickFreq())
+        return 0;
+    return 1;
+}
+
+void __wrap_native_hook_save_done(int result)
+{
+    if (result == 0)
+        fprintf(stderr, "menu: save now: saved\n");
+    else
+        fprintf(stderr, "menu: save now: the card refused it (%d)\n", result);
+    nx_save_result = result == 0 ? 1 : -1;
+    nx_save_until = armGetSystemTick() + 3 * armGetSystemTickFreq();
+}
+
 int __wrap_native_hook_idle_lines(void)
 {
     return nx_idle_lines;
@@ -195,7 +231,7 @@ static const char *scale_name(int halves)
     return halves == 3 ? "1.5X" : halves == 4 ? "2X" : "1X";
 }
 
-enum { ITEM_RESUME, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_CONTROLS, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_TRIALS, ITEM_QUIT, ITEMS };
+enum { ITEM_RESUME, ITEM_SAVE, ITEM_WIDE, ITEM_FAST, ITEM_SIZE, ITEM_TRANSLUCENCY, ITEM_VOICES, ITEM_TEXT, ITEM_CONTROLS, ITEM_VOLUME, ITEM_COUNTER, ITEM_CAPTURE, ITEM_TRIALS, ITEM_QUIT, ITEMS };
 // the controls page's items: the controls, then DEFAULTS and BACK
 enum { PAGE_MAIN, PAGE_CONTROLS };
 // the page's rows: the six Dreamcast buttons, TALK, D-PAD, CAMERA STICK, IDLE LINES, DEFAULTS, BACK
@@ -306,6 +342,7 @@ int nx_menu_lines(char lines[][40], int most, int *selected)
     snprintf(lines[n++], 40, "SONICADVENTURERE-NX");
     snprintf(lines[n++], 40, " ");
     snprintf(lines[n++], 40, "RESUME");
+    snprintf(lines[n++], 40, "SAVE NOW");
     snprintf(lines[n++], 40, "WIDESCREEN      %s", port_toggles[1] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "60 FPS          %s", port_toggles[2] ? "ON" : "OFF");
     snprintf(lines[n++], 40, "RESOLUTION      %s", scale_name(nx_halves));
@@ -342,6 +379,8 @@ const char *nx_menu_hint(void)
         return "B GOES BACK";
     }
     switch (cursor) {
+    case ITEM_SAVE:
+        return can_save_now() ? "A SAVES YOUR STORY HERE" : "ADVENTURE AREAS IN A STORY ONLY";
     case ITEM_CONTROLS:
         return "REMAP THE BUTTONS";
     case ITEM_SIZE:
@@ -508,6 +547,17 @@ int native_menu_step(void)
         if (cursor == ITEM_RESUME) {
             nx_menu_open = 0;
             fprintf(stderr, "menu: closed, the game goes on\n");
+            return 0;
+        }
+        if (cursor == ITEM_SAVE) {
+            if (!can_save_now()) {
+                fprintf(stderr, "menu: save now: not here\n");
+                return 1;
+            }
+            save_request_tick = armGetSystemTick();
+            save_request = 1;
+            nx_menu_open = 0;
+            fprintf(stderr, "menu: save now: asked, the game goes on\n");
             return 0;
         }
         if (cursor == ITEM_CONTROLS) {

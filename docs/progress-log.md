@@ -2,6 +2,23 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-25: Save now, in the port menu
+
+- The owner found Sonic's Crystal Ring lost four times: picked up, then no save before he quit.
+  The game saves only where src/ calls save_write or save_write_wait: an action stage cleared
+  (stage.c's exit to the field), a character notice (playable.c's notice_destroy, story_save),
+  a story's last section (story_save_wait) and its ending (stage.c's save_now). level_item.c's
+  pickup only sets the flag (event_flag_set); moving between fields and the Chao garden (its own
+  file, SONICADV_ALF) never save SONICADV_SYS. So the port behaves as the Dreamcast does.
+- Patch 0026: each STAGE_PLAY frame of an adventure field, stage_step_field asks
+  native_hook_save_now whether to save, passing whether it may (a story, its section not ended,
+  no event in control, Station Square to the past, not the gardens). On a request it saves as
+  story_save does (the field and its last entrance, save_write_wait) and passes the result to
+  native_hook_save_done.
+- The port menu's SAVE NOW (after RESUME): only while a field frame said it may save in the
+  last quarter second, else its hint says adventure areas only. A closes the menu; the next
+  field frame saves; SAVED (or SAVE FAILED) shows at the top left for 3 seconds.
+
 ## 2026-11-25: The Chao gardens, and their messages in English
 
 - The owner in the Station Square garden (1.0): hatched a Chao, left, quit, came back, the Chao

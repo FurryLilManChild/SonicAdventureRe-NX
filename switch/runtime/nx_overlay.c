@@ -163,6 +163,22 @@ static void draw_menu(void)
     text(&k, 24, k.h - 14 - 7 * MENU_SCALE, nx_menu_hint(), MENU_SCALE, 150);
 }
 
+// SAVE NOW's result (nx_menu.c), at the top left for a few seconds
+extern volatile int nx_save_result;
+extern volatile u64 nx_save_until;
+#define SAVED_W 200
+#define SAVED_H 30
+static uint8_t saved_px[SAVED_W * SAVED_H * 4];
+static int saved_drawn;
+
+static void draw_saved(void)
+{
+    struct canvas k = {saved_px, SAVED_W, SAVED_H};
+    fill(&k, 0, 0, k.w, k.h, 16);
+    text(&k, 8, 8, nx_save_result > 0 ? "SAVED" : "SAVE FAILED", 2, 255);
+    saved_drawn = nx_save_result;
+}
+
 const uint8_t *native_overlay(uint32_t *width, uint32_t *height, int32_t *x, int32_t *y, uint32_t region_width,
                               uint32_t region_height)
 {
@@ -193,6 +209,15 @@ const uint8_t *native_overlay(uint32_t *width, uint32_t *height, int32_t *x, int
             shown_fps = fps;
             draw_counter(fps);
         }
+    }
+    if (nx_save_result && now < nx_save_until) {
+        if (saved_drawn != nx_save_result)
+            draw_saved();
+        *width = SAVED_W;
+        *height = SAVED_H;
+        *x = 8;
+        *y = 8;
+        return saved_px;
     }
     if (!nx_overlay_on)
         return NULL;
