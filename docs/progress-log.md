@@ -2,6 +2,25 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-25: The Chao gardens, and their messages in English
+
+- The owner in the Station Square garden (1.0): hatched a Chao, left, quit, came back, the Chao
+  still there. His card: SONICADV_ALF, 28 blocks, A-LIFE header, data written; each leaving saved
+  the card, read back the same; no errors in the garden sessions. The VMU transporter not tried.
+- The garden's windows (CHAO_HYOUJI, 22 textures, the transporter's messages among them) were
+  English already: every texture matches the US _E file in size. The other garden textures are
+  the same files on both discs.
+- Its Japanese text is the gardens' and the Chao race's messages: script pages as the stages'
+  hints (script.c's table per garden stage; the race's by script_set_table), compiled into
+  AL_GARDEN00/01/02.PRS and AL_RACE.PRS, which load at 0x0cb80000. The US modules hold each
+  Japanese run, then the English after it.
+- tools/english: common.module_base (0x0cb80000 for al_garden and al_race), make_english and the
+  loader's english_build.c read each module at its own base; make_maps.py gardens maps the
+  Japanese modules' own pages: 42 of 93 (garden00 24, garden01 4, garden02 4, race 10). The rest
+  the US release left in Japanese too (the same 13 short runs in each module, likely unused).
+  make_english on the US modules: 42 English pages, none with Japanese bytes. Not yet on the
+  Switch.
+
 ## 2026-11-25: 1.0
 
 - The tester's run of 0.5.4-hs1 (c5ee32a): Gamma's Hot Shelter plays through the long drop and

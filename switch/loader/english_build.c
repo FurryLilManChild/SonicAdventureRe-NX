@@ -416,7 +416,16 @@ static int put_escaped(struct buf *b, const u8 *s, size_t n)
 
 // --- stage hints (common.hint_runs, hint_blocks, hint_english) ---
 
-#define MODULE_BASE 0x0c900000u
+// where the module loads: a stage or area at 0x0c900000, a garden or the Chao race at
+// 0x0cb80000 (above AL_MAIN, the code they share)
+static u32 MODULE_BASE = 0x0c900000u;
+
+static u32 module_base(const char *module)
+{
+    return strncasecmp(module, "al_garden", 9) == 0 || strncasecmp(module, "al_race", 7) == 0
+               ? 0x0cb80000u
+               : 0x0c900000u;
+}
 #define MOST_RUNS (1 << 17)
 #define MOST_PAGE_REFS (1 << 19)
 #define MOST_PAGES 64
@@ -859,6 +868,7 @@ static int write_hints(const struct listing *us, const char *out)
             snprintf(name, sizeof name, "%s.PRS", r->module);
             const char *path = find(us, name);
             have = path && !load_decoded(path, &mod);
+            MODULE_BASE = module_base(r->module);
             nr = have ? hint_runs(&mod, runs) : 0;
             nb = have ? hint_blocks(runs, nr, blocks, 256) : 0;
         }

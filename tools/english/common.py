@@ -277,6 +277,13 @@ def messages_rebased(us, jp_base, voice_of):
 MODULE_BASE = 0x0c900000  # where a stage or area module loads
 
 
+def module_base(module):
+    """where a module loads: a stage or area at 0x0c900000, a garden or the Chao race at
+    0x0cb80000 (above AL_MAIN, the code they share)"""
+    m = module.lower()
+    return 0x0cb80000 if m.startswith(('al_garden', 'al_race')) else 0x0c900000
+
+
 def hint_runs(d):
     """the module's page arrays in order: (offset, [page text, ...])"""
     inside = lambda p: MODULE_BASE <= p < MODULE_BASE + len(d)

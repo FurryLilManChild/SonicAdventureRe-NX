@@ -3,6 +3,7 @@
 no game text or sound). Run by the port's developers, not the players.
 
   make_maps.py GEN_EVENTS_DIR US_EVENTS_DIR VOICE_MAP.json OUT_DIR [GEN_MODULES_DIR US_MODULES_DIR]
+  make_maps.py gardens JP_SONICADV US_SONICADV HINT_MAP.txt
 
 GEN_EVENTS_DIR is the decomp's build/gen/events (the Japanese release's subtitles), US_EVENTS_DIR
 the US disc's cutscene modules decompressed (EV0001.bin, ...), VOICE_MAP.json event_voices.py's
@@ -14,6 +15,10 @@ output. It writes:
   hint_map.txt      a stage's hint page: module, CRC-32 of the Japanese page, and where its US
                     Japanese page sits (block, run, page; common.hint_blocks); with the modules
                     (the decomp's build/gen/modules, and the US disc's stage modules decompressed)
+
+gardens: the Chao gardens' and the Chao race's messages (AL_GARDEN00.PRS ..., AL_RACE.PRS, run
+like the stages' hints) into HINT_MAP.txt, in place of the rows it had for them. Their Japanese
+pages are read from the Japanese disc's own modules, which load at 0x0cb80000.
 """
 import json
 import os
@@ -25,7 +30,39 @@ import common  # noqa: E402
 from event_text import jp_subtitles  # noqa: E402
 
 
+GARDEN_MODULES = ('al_garden00', 'al_garden01', 'al_garden02', 'al_race')
+
+
+def gardens(jp_dir, us_dir, hint_map):
+    """each Japanese garden or race page (the Japanese module's own pages) to the US module's same
+    page, matched by its words"""
+    import difflib
+    bare = lambda t: bytes(b for b in t if b not in (7, 9, 10))
+    rows, total = [], 0
+    for mod in GARDEN_MODULES:
+        common.MODULE_BASE = common.module_base(mod)
+        jp = common.prs_decompress(open(os.path.join(jp_dir, mod.upper() + '.PRS'), 'rb').read())
+        us = common.prs_decompress(open(os.path.join(us_dir, mod.upper() + '.PRS'), 'rb').read())
+        blocks = common.hint_blocks(us)
+        pages = [(b, r, p, t) for b, (J, _) in enumerate(blocks) for r, run in enumerate(J) for p, t in enumerate(run[1])
+                 if common.hint_english(blocks, b, r, p)]
+        for _, run in common.hint_runs(jp):
+            for t in run:
+                if not common.is_japanese(t):
+                    continue
+                total += 1
+                best = max(pages, key=lambda c: difflib.SequenceMatcher(None, bare(t), bare(c[3])).ratio(), default=None)
+                if best and difflib.SequenceMatcher(None, bare(t), bare(best[3])).ratio() >= 0.6:
+                    rows.append(f'{mod} {zlib.crc32(t):08x} {best[0]} {best[1]} {best[2]}\n')
+    kept = [r for r in open(hint_map) if r.startswith('#') or r.split()[0] not in GARDEN_MODULES]
+    with open(hint_map, 'w') as f:
+        f.writelines(kept + rows)
+    print(f'{len(rows)} of {total} garden and race pages mapped')
+
+
 def main():
+    if sys.argv[1] == 'gardens':
+        return gardens(*sys.argv[2:5])
     gen, us_dir, voice_json, out = sys.argv[1:5]
     lines, total, aligned = [], 0, 0
     for ev in sorted(os.listdir(gen)):

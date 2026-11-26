@@ -105,7 +105,8 @@ def main():
 
 
 def hints(disc, out):
-    """the stages' hint pages in English, from the US stage modules (STG01.PRS ...)"""
+    """the stages' hint pages and the gardens' and Chao race's messages in English, from the US
+    modules (STG01.PRS ..., AL_GARDEN00.PRS ...)"""
     modules, rows, missing = {}, [], set()
     lines = ['# SonicAdventureRe-nx English stage hints, made by tools/english/make_english.py\n']
     for row in open(os.path.join(here, 'hint_map.txt')):
@@ -114,6 +115,7 @@ def hints(disc, out):
         mod, crc, b, r, p = row.split()
         if mod not in modules:
             path = find(disc, mod.upper() + '.PRS')
+            common.MODULE_BASE = common.module_base(mod)
             modules[mod] = common.hint_blocks(common.prs_decompress(open(path, 'rb').read())) if path else None
             if not path:
                 missing.add(mod)
