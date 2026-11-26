@@ -62,6 +62,12 @@ If a disc file is missing or is not the expected version, the screen says which 
 Port menu
 ---------
 Press Minus and Plus together in the game.
+- SAVE NOW (experimental, but tested): saves your story on the spot. The game itself only saves
+  when you clear an action stage, unlock a character or finish a story, so an upgrade picked up
+  in an adventure area is lost if you quit before then. SAVE NOW works in Station Square, the
+  Egg Carrier, Mystic Ruins and the Past during a story (not in action stages, bosses,
+  cutscenes, the Chao gardens or trials); SAVED shows at the top left. Loading the file starts
+  you in that area at the last entrance you came through.
 - WIDESCREEN: on (16:9) or off (4:3).
 - 60 FPS: on, or off for the game's own 30.
 - RESOLUTION: 1X, 1.5X, 2X. 2X may not hold 60 fps.
@@ -99,6 +105,9 @@ disc. What is in English:
 - Town and field messages (Station Square, Mystic Ruins, the Past).
 - Tikal's hints: in Mystic Ruins and the action stages (except Hot Shelter); Station Square's
   hint boxes, signs and characters' story hints (173 hint pages in all).
+- The Chao gardens' and the Chao race's messages (42 pages: Station Square 24, Egg Carrier 4,
+  Mystic Ruins 4, the race 10). The gardens' windows and the transporter's messages were already
+  English. The other garden pages the US release also left in Japanese.
 
 Not yet in English:
 - 83 cutscene subtitles, where the English script splits the lines differently.
@@ -116,6 +125,8 @@ Known issues
   (for one, the bridge before Windy Valley's tornado). EFFECTS FAST, the default, fixes that.
 - Some scenes may not hold 60 fps everywhere.
 - Cutscenes run at 30 fps, as in the original.
+- The Chao garden's VMU transporter can't move a Chao to a VMU or start Chao Adventure (the
+  Switch has no VMU). Using it does no harm.
 
 Reporting problems
 ------------------

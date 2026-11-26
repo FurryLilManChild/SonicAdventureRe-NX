@@ -2,6 +2,14 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-26: 1.0, with SAVE NOW and the gardens in English
+
+- The owner's test of b959846: SAVE NOW saved in Station Square; the upgrade was kept after a
+  relaunch. The Station Square garden's messages showed in English.
+- 1.0 is repackaged from b959846's game: 9f07319's 1.0 plus the garden English (5dfde27) and
+  SAVE NOW (patch 0026), marked experimental in the READMEs and notes. Known issue added: the
+  VMU transporter can't move a Chao to a VMU or start Chao Adventure.
+
 ## 2026-11-25: Save now, in the port menu
 
 - The owner found Sonic's Crystal Ring lost four times: picked up, then no save before he quit.

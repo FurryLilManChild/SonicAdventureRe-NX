@@ -8,8 +8,22 @@ No game data is included. The port rebuilds the game from your own disc dumps.
 
 ## 1.0
 
-Testers have now played every story through from start to finish on the Switch. These are the
-fixes since 0.5.3, each found by a player and confirmed fixed on the Switch:
+Testers have now played every story through from start to finish on the Switch.
+
+New in 1.0:
+
+- **SAVE NOW, in the port menu (Minus and Plus): experimental, but tested.** The game only saves
+  when you clear an action stage, unlock a character or finish a story, as on the Dreamcast. An
+  upgrade (such as Sonic's Crystal Ring) picked up in an adventure area was lost if you quit
+  before one of those. SAVE NOW saves your story on the spot in Station Square, the Egg Carrier,
+  Mystic Ruins and the Past (not in action stages, bosses, cutscenes, the Chao gardens or
+  trials). SAVED shows at the top left; loading the file starts you in that area at the last
+  entrance you came through.
+- **The Chao gardens in English.** The gardens' and the Chao race's messages now come from your
+  US disc (42 pages). The gardens' windows were already English. Chao save to card.bin and stay
+  there between sessions.
+
+Fixes since 0.5.3, each found by a player and confirmed fixed on the Switch:
 
 - **Gamma, Hot Shelter: no more crash after the long drop past the train.** The game lists the
   targets Gamma shoots but never takes one off the list, so a target that unloaded stayed listed
@@ -75,6 +89,8 @@ not been checked. The opening title screen stays Japanese on purpose.
 - Thick smoke and dust can still slow TRANSLUCENCY ACCURATE down: EFFECTS FAST fixes that.
 - Some scenes may not hold 60 fps everywhere. Cutscenes run at 30, as in the original.
 - With 60 FPS on, the idle line may come after about 15 seconds instead of 30.
+- The Chao garden's VMU transporter can't move a Chao to a VMU or start Chao Adventure (the
+  Switch has no VMU). Using it does no harm.
 
 ## Reporting problems
 
