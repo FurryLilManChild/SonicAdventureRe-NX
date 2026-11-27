@@ -77,6 +77,14 @@ Newest first. One entry per session, with evidence.
   with no rings and no drain (trial_super_free), flight as in the trial; a scene taking him
   (event_in_control) or leaving the fields turns him back. While tested it's open at any
   point of his story; SUPER_FIELD_NEEDS_LAST_STORY 1 for a release (FLAG_CLEAR_LAST).
+- The owner's test of 5e8e198: fields and flight good around Station Square; he asked for a
+  ceiling on the climb. Super on the train to Mystic Ruins crashed as it loaded. Atmosphere
+  report 01795808759: data abort at 4, PC sonic_step+0xd0: the new Sonic's first step, mode
+  SONIC_INIT, motion->record still NULL (x21), read upgrades (offset 4) because trial_super_on
+  was still set: the old Sonic's destructor, which clears it, had not run yet. Now the trial
+  step does nothing for a Sonic without a record or in SONIC_INIT, or for any Sonic but the
+  one who turned super (trial_super_work), and only that one's destructor clears the state.
+  Flight's ceiling: 200 units above where he took off (TRIAL_FLY_CEILING), to tune.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.

@@ -24,7 +24,7 @@
  };
  
  /* the rows of sonic_actions his code sets or tests, by index. his board
-@@ -1226,6 +1236,278 @@
+@@ -1226,6 +1236,291 @@
  }
  
  /* choose his mode for this step, then move, pose and draw him by it */
@@ -51,6 +51,12 @@
 +static Bool trial_super_on;
 +/* turned super in an adventure field: no rings asked, none drained */
 +static Bool trial_super_free;
++/* the Sonic who turned super: a new Sonic (another stage's) can take his
++ * first steps before the old one's destructor has run */
++static struct task_work *trial_super_work;
++/* flight's ceiling: this far above where he took off */
++#define TRIAL_FLY_CEILING 200.0F
++static Float trial_super_fly_top;
 +/* the music before the super theme, asked for again when he turns back */
 +static int trial_super_music = -1;
 +int native_stream_music_current(void);
@@ -138,6 +144,7 @@
 +    record->consts.still_grip *= 2.0F;
 +    record->anim.actions = trial_super_actions;
 +    trial_super_on = TRUE;
++    trial_super_work = work;
 +    trial_super_steps = 0;
 +    trial_super_music = native_stream_music_current();
 +    stream_request_music(MUSIC_SPRSONIC);
@@ -199,7 +206,7 @@
 +        record->speed.x *= TRIAL_FLY_SLOW;
 +    }
 +    record->speed.z = 0.0F;
-+    if (on & PDD_DGT_TA) {
++    if ((on & PDD_DGT_TA) && work->pos.y < trial_super_fly_top) {
 +        record->speed.y = record->consts.jump_speed;
 +    } else if (on & PDD_DGT_TY) {
 +        record->speed.y = -record->consts.jump_speed;
@@ -220,6 +227,11 @@
 +    Bool jumping;
 +    Bool flying;
 +
++    if (record == NULL || work->mode == SONIC_INIT ||
++        (trial_super_on && work != trial_super_work)) {
++        /* a Sonic not yet made, or not the one who turned super */
++        return FALSE;
++    }
 +    if (trial_super_on && !(record->upgrades & PLAYER_SONIC_SUPER)) {
 +        /* something else ended it, as a fall down does */
 +        trial_super_end(record);
@@ -283,6 +295,7 @@
 +    if (jumping && (press & PDD_DGT_TB)) {
 +        work->mode = SONIC_FLY;
 +        record->speed.y = 0.0F;
++        trial_super_fly_top = work->pos.y + TRIAL_FLY_CEILING;
 +        native_hook_note("trial super: flight on, rings", ring_count(), 0);
 +        trial_super_fly(work, motion, record);
 +        return TRUE;
@@ -303,7 +316,7 @@
  void sonic_step(struct task *task)
  {
      struct task_work *work = task->work;
-@@ -1248,6 +1530,12 @@
+@@ -1248,6 +1543,12 @@
      if (edit_mode == 1) {
          work->mode = SONIC_EDIT;
      } else if (work->mode != SONIC_DOWN) {
@@ -316,7 +329,7 @@
          sonic_choose_mode(work, motion, record);
      }
      /* his shape's attack and guard levels: the highest while he's
-@@ -1313,7 +1601,15 @@
+@@ -1313,7 +1614,15 @@
          {
              struct weld *weld = sonic_welds;
  
@@ -333,7 +346,7 @@
                  for (; weld->base != NULL; weld++) {
                      if (weld->base == &super_sonic_object) {
                          weld->kind = WELD_TO_A;
-@@ -2038,6 +2334,16 @@
+@@ -2038,6 +2347,16 @@
      case SONIC_EDIT:
          sonic_edit(work, motion, record);
          break;
@@ -350,21 +363,25 @@
      }
      player_anim_step(&record->anim);
      /* uncurled, he wears the light speed shoes and the crystal ring if he
-@@ -4252,6 +4558,13 @@
+@@ -4252,6 +4571,17 @@
      player_free(PLAYER_VARS(work)->player);
      sound_stop_id((int)work);
      texture_release_character(CHARACTER_SONIC);
 +#if defined(NONMATCHING) && !defined(DREAMCAST)
-+    if (trial_super_textures) {
-+        njReleaseTexture(&super_sonic_texlist);
-+        trial_super_textures = FALSE;
++    if (work == trial_super_work || !trial_super_on) {
++        if (trial_super_textures) {
++            njReleaseTexture(&super_sonic_texlist);
++            trial_super_textures = FALSE;
++        }
++        trial_super_on = FALSE;
++        trial_super_free = FALSE;
++        trial_super_work = NULL;
 +    }
-+    trial_super_on = FALSE;
 +#endif
  }
  
  /* his shape's center: center_y above his feet, turned with him */
-@@ -4296,7 +4609,15 @@
+@@ -4296,7 +4626,15 @@
          action = record->anim.current;
      }
      if (!(TASK_TIMER(work) & BLINK_HIDDEN)) {
@@ -381,7 +398,7 @@
              njSetTexture(&super_sonic_texlist);
          } else {
              njSetTexture(&sonic_texlist);
-@@ -4369,7 +4690,16 @@
+@@ -4369,7 +4707,16 @@
                  draw_action(record->anim.blend, record->anim.frame);
              }
              if (work->flags & SONIC_CHARGED) {
@@ -398,7 +415,7 @@
              }
          }
          njPopMatrix(1);
-@@ -7229,6 +7559,14 @@
+@@ -7229,6 +7576,14 @@
  {
      struct task *task;
  
@@ -413,7 +430,7 @@
      if ((task = task_create(TASK_WORK, 6, dash_start)) != NULL) {
          PLAYER_VARS(task->work)->player = PLAYER_VARS(work)->player;
      }
-@@ -7256,6 +7594,14 @@
+@@ -7256,6 +7611,14 @@
  {
      struct task *task;
  
@@ -428,7 +445,7 @@
      if ((task = task_create(TASK_WORK, 5, ball_follow_start)) != NULL) {
          PLAYER_VARS(task->work)->player = PLAYER_VARS(work)->player;
      }
-@@ -7274,6 +7620,14 @@
+@@ -7274,6 +7637,14 @@
  {
      struct task *task;
  
@@ -443,7 +460,7 @@
      if ((task = task_create(TASK_WORK, 5, ball_shrink_start)) != NULL) {
          PLAYER_VARS(task->work)->player = PLAYER_VARS(work)->player;
      }
-@@ -7457,8 +7811,14 @@
+@@ -7457,8 +7828,14 @@
       * top_speed and ground_accel (FMOV.S at 0x8c0ba198, 0x8c0ba1a0), not
       * where sonic_super_start read them (0x8c0ba246, 0x8c0ba250). his
       * resist.x and air_resist stay as super Sonic's */
