@@ -17,6 +17,10 @@ Newest first. One entry per session, with evidence.
   steps; at 0, or the button again, he turns back (his rows, welds off, music restored).
   sonic_super_destroy's @bug (resist.x and air_resist put back into top_speed and
   ground_accel) repaired for port builds.
+- The owner's test of 8a236dc (game_mode 9, stage 1 act 0): no "trial super" line. The trial
+  check was player_record == NULL, but trials keep the story record (story_clear is never
+  called). Now game_mode == GAME_MODE_TRIAL, and each action press in a jump is logged with
+  the rings.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.
