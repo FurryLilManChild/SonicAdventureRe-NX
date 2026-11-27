@@ -21,6 +21,11 @@ Newest first. One entry per session, with evidence.
   check was player_record == NULL, but trials keep the story record (story_clear is never
   called). Now game_mode == GAME_MODE_TRIAL, and each action press in a jump is logged with
   the rings.
+- Still no transform in the owner's next test (no log, read from the code): in SONIC_JUMP,
+  sonic_choose_mode's sonic_try_uncurl takes the action press first (mode to SONIC_FALL),
+  so the check after it never saw a jump. Phase 1's "the action button is free in a jump"
+  was wrong. The check now runs before sonic_choose_mode, and a press that turns him super
+  or back takes that step's choice; under 50 rings the press uncurls him as before.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.

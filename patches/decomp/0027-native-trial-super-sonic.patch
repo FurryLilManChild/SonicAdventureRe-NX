@@ -11,7 +11,7 @@
  #include "system/task.h"
  #include "system/texture.h"
  #include "system/util.h"
-@@ -1226,6 +1230,146 @@
+@@ -1226,6 +1230,149 @@
  }
  
  /* choose his mode for this step, then move, pose and draw him by it */
@@ -111,7 +111,8 @@
 +    native_hook_note("trial super: off, rings", ring_count(), 0);
 +}
 +
-+static void trial_super_step(struct task_work *work, struct task_motion *motion,
++/* TRUE when a press turned him super or back, taking the step's choice */
++static Bool trial_super_step(struct task_work *work, struct task_motion *motion,
 +                             struct player *record)
 +{
 +    Bool pressed;
@@ -120,10 +121,10 @@
 +    if (trial_super_on && !(record->upgrades & PLAYER_SONIC_SUPER)) {
 +        /* something else ended it, as a fall down does */
 +        trial_super_end(record);
-+        return;
++        return FALSE;
 +    }
 +    if (!trial_super_here() || PLAYER_VARS(work)->player != 0) {
-+        return;
++        return FALSE;
 +    }
 +    pressed = work->mode == SONIC_JUMP &&
 +              PAD_BUTTONS(pad_records[PLAYER_VARS(work)->player].press,
@@ -136,12 +137,13 @@
 +    if (!trial_super_on) {
 +        if (pressed && ring_count() >= TRIAL_SUPER_RINGS) {
 +            trial_super_begin(work, record);
++            return TRUE;
 +        }
-+        return;
++        return FALSE;
 +    }
 +    if (pressed) {
 +        trial_super_end(record);
-+        return;
++        return TRUE;
 +    }
 +    if (++trial_super_steps >= TRIAL_SUPER_DRAIN) {
 +        trial_super_steps = 0;
@@ -152,23 +154,27 @@
 +    if (ring_count() <= 0) {
 +        trial_super_end(record);
 +    }
++    return FALSE;
 +}
 +#endif
 +
  void sonic_step(struct task *task)
  {
      struct task_work *work = task->work;
-@@ -1250,6 +1394,9 @@
+@@ -1248,6 +1395,12 @@
+     if (edit_mode == 1) {
+         work->mode = SONIC_EDIT;
      } else if (work->mode != SONIC_DOWN) {
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++        /* before the mode is chosen: in a jump the action button uncurls
++         * him (sonic_try_uncurl), so a press that turns him super or back
++         * takes this step's choice */
++        if (!trial_super_step(work, motion, record))
++#endif
          sonic_choose_mode(work, motion, record);
      }
-+#if defined(NONMATCHING) && !defined(DREAMCAST)
-+    trial_super_step(work, motion, record);
-+#endif
      /* his shape's attack and guard levels: the highest while he's
-      * invincible or super, raised while he attacks, and 0 at rest */
-     if (work->collision != NULL) {
-@@ -4252,6 +4399,16 @@
+@@ -4252,6 +4405,16 @@
      player_free(PLAYER_VARS(work)->player);
      sound_stop_id((int)work);
      texture_release_character(CHARACTER_SONIC);
@@ -185,7 +191,7 @@
  }
  
  /* his shape's center: center_y above his feet, turned with him */
-@@ -4296,7 +4453,11 @@
+@@ -4296,7 +4459,11 @@
          action = record->anim.current;
      }
      if (!(TASK_TIMER(work) & BLINK_HIDDEN)) {
@@ -198,7 +204,7 @@
              njSetTexture(&super_sonic_texlist);
          } else {
              njSetTexture(&sonic_texlist);
-@@ -7457,8 +7618,14 @@
+@@ -7457,8 +7624,14 @@
       * top_speed and ground_accel (FMOV.S at 0x8c0ba198, 0x8c0ba1a0), not
       * where sonic_super_start read them (0x8c0ba246, 0x8c0ba250). his
       * resist.x and air_resist stay as super Sonic's */
