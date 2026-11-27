@@ -11,7 +11,7 @@
  #include "system/task.h"
  #include "system/texture.h"
  #include "system/util.h"
-@@ -1226,6 +1230,149 @@
+@@ -1226,6 +1230,136 @@
  }
  
  /* choose his mode for this step, then move, pose and draw him by it */
@@ -60,17 +60,6 @@
 +    trial_super_made = TRUE;
 +}
 +
-+static void trial_super_welds(int kind)
-+{
-+    struct weld *weld;
-+
-+    for (weld = sonic_welds; weld->base != NULL; weld++) {
-+        if (weld->base == &super_sonic_object) {
-+            weld->kind = kind;
-+        }
-+    }
-+}
-+
 +static void trial_super_begin(struct task_work *work, struct player *record)
 +{
 +    struct task *task;
@@ -91,7 +80,6 @@
 +    if (task != NULL) {
 +        SUPER(task)->player = PLAYER_VARS(work)->player;
 +    }
-+    trial_super_welds(WELD_TO_A);
 +    record->anim.actions = trial_super_actions;
 +    trial_super_on = TRUE;
 +    trial_super_steps = 0;
@@ -104,7 +92,6 @@
 +static void trial_super_end(struct player *record)
 +{
 +    record->upgrades &= ~PLAYER_SONIC_SUPER;
-+    trial_super_welds(WELD_OFF);
 +    record->anim.actions = sonic_actions;
 +    trial_super_on = FALSE;
 +    stream_restore_music();
@@ -161,7 +148,7 @@
  void sonic_step(struct task *task)
  {
      struct task_work *work = task->work;
-@@ -1248,6 +1395,12 @@
+@@ -1248,6 +1382,12 @@
      if (edit_mode == 1) {
          work->mode = SONIC_EDIT;
      } else if (work->mode != SONIC_DOWN) {
@@ -174,7 +161,24 @@
          sonic_choose_mode(work, motion, record);
      }
      /* his shape's attack and guard levels: the highest while he's
-@@ -4252,6 +4405,16 @@
+@@ -1313,7 +1453,15 @@
+         {
+             struct weld *weld = sonic_welds;
+ 
+-            if (IN_STAGE(STAGE_CHAOS7)) {
++            if (IN_STAGE(STAGE_CHAOS7)
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++                /* the port's trial super: the seams' buffers are made only
++                 * for welds on at this start (player_update_welds' make), so
++                 * they are on from the start where he can turn super; they
++                 * join only while an action plays on super Sonic's model */
++                || trial_super_here()
++#endif
++            ) {
+                 for (; weld->base != NULL; weld++) {
+                     if (weld->base == &super_sonic_object) {
+                         weld->kind = WELD_TO_A;
+@@ -4252,6 +4400,13 @@
      player_free(PLAYER_VARS(work)->player);
      sound_stop_id((int)work);
      texture_release_character(CHARACTER_SONIC);
@@ -183,28 +187,27 @@
 +        njReleaseTexture(&super_sonic_texlist);
 +        trial_super_textures = FALSE;
 +    }
-+    if (trial_super_on) {
-+        trial_super_welds(WELD_OFF);
-+        trial_super_on = FALSE;
-+    }
++    trial_super_on = FALSE;
 +#endif
  }
  
  /* his shape's center: center_y above his feet, turned with him */
-@@ -4296,7 +4459,11 @@
+@@ -4296,7 +4451,13 @@
          action = record->anim.current;
      }
      if (!(TASK_TIMER(work) & BLINK_HIDDEN)) {
 -        if (action >= ACTION_SUPER_STAND && action <= ACTION_SUPER_BALL) {
 +        if ((action >= ACTION_SUPER_STAND && action <= ACTION_SUPER_BALL)
 +#if defined(NONMATCHING) && !defined(DREAMCAST)
-+            || trial_super_on
++            || (trial_super_on &&
++                record->anim.actions[action].action->object ==
++                    &super_sonic_object)
 +#endif
 +        ) {
              njSetTexture(&super_sonic_texlist);
          } else {
              njSetTexture(&sonic_texlist);
-@@ -7457,8 +7624,14 @@
+@@ -7457,8 +7618,14 @@
       * top_speed and ground_accel (FMOV.S at 0x8c0ba198, 0x8c0ba1a0), not
       * where sonic_super_start read them (0x8c0ba246, 0x8c0ba250). his
       * resist.x and air_resist stay as super Sonic's */

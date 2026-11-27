@@ -26,6 +26,16 @@ Newest first. One entry per session, with evidence.
   so the check after it never saw a jump. Phase 1's "the action button is free in a jump"
   was wrong. The check now runs before sonic_choose_mode, and a press that turns him super
   or back takes that step's choice; under 50 rings the press uncurls him as before.
+- 7f82764 turned super (log: rings 61, on at 95.2 s), drew two or three frames, then the
+  process died. The port's crash handler wrote nothing; Atmosphere's report
+  (01795781565) has a data abort at address 8, PC module+0x15e04c, which the build's ELF
+  (text at 0x500400000) names player_update_welds+0x6a0, in the WELD_TO_A case. Cause, from
+  the code: player_update_welds' PLAYER_WELD_MAKE pass, run once at Sonic's start, makes the
+  vertex buffers only for welds that are on; super Sonic's are WELD_OFF outside Chaos 7, so
+  turning them on at the transform left weld->vertices NULL. Fix: the super welds are on from
+  Sonic's start wherever the trial super is possible (as Chaos 7 does; they join only while
+  an action plays on super_sonic_object), and are no longer switched. Super textures now
+  only for actions on super_sonic_object, so his ball and spin keep their own.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.
