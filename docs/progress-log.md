@@ -42,6 +42,18 @@ Newest first. One entry per session, with evidence.
   top_speed, still_grip times 2) instead of sonic_super_start's constants, put back when he
   turns back; ACTION_SPRINT and ACTION_FULL_SPEED play super_sonic_run_action (his flight in
   Chaos 7); every ball, spin and roll row plays super_sonic_ball_action, with super textures.
+- The owner's test of 3f681ee: speed, flight and the gold ball right. The spin dash's charge
+  glow was blue, the stage music didn't come back when he turned back, and in act 2 the
+  stage music replaced the super theme. Causes, from the code: aura_draw (effects.c) tints
+  sonic_aura_object blue with fixed colors, and plays the current row's motion (now the
+  super ball's) on that spin model; stream_restore_music asks again for the music last saved,
+  which stream_request_and_save_music had set to the super theme itself; an act's start asks
+  for its own music, and the trial check covered act 1 only, so in act 2 nothing ran (no
+  drain). Fixes (0027, 0028): the glow plays sonic_actions' motions and, while super, has red
+  and blue swapped (gold); native_stream_music_current (stream.c) gives the music before the
+  theme, asked for again at the end, and a stage's new music while super becomes the one to go
+  back to; the whole of Emerald Coast is open to the trial super, and a super form already on
+  keeps its drain and button anywhere.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.

@@ -1,0 +1,78 @@
+--- a/src/player/effects.c
++++ b/src/player/effects.c
+@@ -1304,6 +1304,24 @@
+     }
+ }
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* SonicAdventureRe-nx: super Sonic's charge glows gold, its red and blue
++ * swapped */
++static void aura_color_super(NJS_ARGB *color, struct player *record)
++{
++    NJS_ARGB gold = *color;
++
++    if (record->upgrades & PLAYER_SONIC_SUPER) {
++        gold.r = color->b;
++        gold.b = color->r;
++    }
++    njSetConstantMaterial(&gold);
++}
++#define AURA_COLOR(color) aura_color_super(color, record)
++#else
++#define AURA_COLOR(color) njSetConstantMaterial(color)
++#endif
++
+ /* while the record blends, the aura draws the blend in place of the action. its
+  * first color's green falls from 0.28 to 0.1 and rises back over each 128 steps
+  * of play time */
+@@ -1346,13 +1364,13 @@
+     color.g = 0.28F - (phase * 0.18F);
+     color.b = 1.0F;
+     color.a = 0.0F;
+-    njSetConstantMaterial(&color);
++    AURA_COLOR(&color);
+     njSimpleAction(&action, record->anim.frame);
+     color.r = 0.05F;
+     /* @hack spelling: green less 0.15 as -0.15 added, FADD at 0x8c0bc04e; with
+      * -=, SHC subtracts, and 1 of 157 words differ */
+     color.g += -0.15F;
+-    njSetConstantMaterial(&color);
++    AURA_COLOR(&color);
+     sx = 1.05F;
+     sy = 1.05F;
+     sz = 1.05F;
+@@ -1360,14 +1378,14 @@
+     njSimpleAction(&action, record->anim.frame);
+     color.g -= 0.05F;
+     color.b = 0.3F;
+-    njSetConstantMaterial(&color);
++    AURA_COLOR(&color);
+     sx = 1.05F;
+     sy = 1.05F;
+     sz = 1.05F;
+     njScale(NULL, sx, sy, sz);
+     njSimpleAction(&action, record->anim.frame);
+     color.b = color.g = color.r = 0.0F;
+-    njSetConstantMaterial(&color);
++    AURA_COLOR(&color);
+     njPopMatrix(1);
+ }
+ 
+--- a/src/sound/stream.c
++++ b/src/sound/stream.c
+@@ -374,6 +374,15 @@
+     }
+ }
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* SonicAdventureRe-nx: the music asked for last, or -1, for the port's
++ * trial Super Sonic, which plays its theme and asks for this again */
++int native_stream_music_current(void)
++{
++    return music_current;
++}
++#endif
++
+ Bool stream_restore_music(void)
+ {
+     if (music_saved != -1) {

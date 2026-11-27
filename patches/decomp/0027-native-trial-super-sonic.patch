@@ -11,7 +11,7 @@
  #include "system/task.h"
  #include "system/texture.h"
  #include "system/util.h"
-@@ -1226,6 +1230,160 @@
+@@ -1226,6 +1230,173 @@
  }
  
  /* choose his mode for this step, then move, pose and draw him by it */
@@ -36,12 +36,15 @@
 +static Float trial_super_ground_accel, trial_super_top_speed,
 +    trial_super_still_grip;
 +static Bool trial_super_on;
++/* the music before the super theme, asked for again when he turns back */
++static int trial_super_music = -1;
++int native_stream_music_current(void);
 +static int trial_super_steps;
 +
 +static Bool trial_super_here(void)
 +{
 +    return game_mode == GAME_MODE_TRIAL &&
-+           stage_get_stage_act() == STAGE_ACT(STAGE_BEACH, 0);
++           STAGE_OF(stage_get_stage_act()) == STAGE_BEACH;
 +}
 +
 +/* sonic_actions again, with super Sonic's model in each row that plays on
@@ -104,7 +107,8 @@
 +    record->anim.actions = trial_super_actions;
 +    trial_super_on = TRUE;
 +    trial_super_steps = 0;
-+    stream_request_and_save_music(MUSIC_SPRSONIC);
++    trial_super_music = native_stream_music_current();
++    stream_request_music(MUSIC_SPRSONIC);
 +    native_hook_note("trial super: on, rings", ring_count(), 0);
 +}
 +
@@ -118,7 +122,9 @@
 +    record->consts.top_speed = trial_super_top_speed;
 +    record->consts.still_grip = trial_super_still_grip;
 +    trial_super_on = FALSE;
-+    stream_restore_music();
++    if (trial_super_music != -1) {
++        stream_request_music(trial_super_music);
++    }
 +    native_hook_note("trial super: off, rings", ring_count(), 0);
 +}
 +
@@ -134,8 +140,15 @@
 +        trial_super_end(record);
 +        return FALSE;
 +    }
-+    if (!trial_super_here() || PLAYER_VARS(work)->player != 0) {
++    if (PLAYER_VARS(work)->player != 0 ||
++        (!trial_super_on && !trial_super_here())) {
 +        return FALSE;
++    }
++    if (trial_super_on && native_stream_music_current() != MUSIC_SPRSONIC) {
++        /* the stage asked for music of its own (a new act): that is the
++         * music to go back to, and the super theme plays on */
++        trial_super_music = native_stream_music_current();
++        stream_request_music(MUSIC_SPRSONIC);
 +    }
 +    pressed = work->mode == SONIC_JUMP &&
 +              PAD_BUTTONS(pad_records[PLAYER_VARS(work)->player].press,
@@ -172,7 +185,7 @@
  void sonic_step(struct task *task)
  {
      struct task_work *work = task->work;
-@@ -1248,6 +1406,12 @@
+@@ -1248,6 +1419,12 @@
      if (edit_mode == 1) {
          work->mode = SONIC_EDIT;
      } else if (work->mode != SONIC_DOWN) {
@@ -185,7 +198,7 @@
          sonic_choose_mode(work, motion, record);
      }
      /* his shape's attack and guard levels: the highest while he's
-@@ -1313,7 +1477,15 @@
+@@ -1313,7 +1490,15 @@
          {
              struct weld *weld = sonic_welds;
  
@@ -202,7 +215,7 @@
                  for (; weld->base != NULL; weld++) {
                      if (weld->base == &super_sonic_object) {
                          weld->kind = WELD_TO_A;
-@@ -4252,6 +4424,13 @@
+@@ -4252,6 +4437,13 @@
      player_free(PLAYER_VARS(work)->player);
      sound_stop_id((int)work);
      texture_release_character(CHARACTER_SONIC);
@@ -216,7 +229,7 @@
  }
  
  /* his shape's center: center_y above his feet, turned with him */
-@@ -4296,7 +4475,15 @@
+@@ -4296,7 +4488,15 @@
          action = record->anim.current;
      }
      if (!(TASK_TIMER(work) & BLINK_HIDDEN)) {
@@ -233,7 +246,24 @@
              njSetTexture(&super_sonic_texlist);
          } else {
              njSetTexture(&sonic_texlist);
-@@ -7457,8 +7644,14 @@
+@@ -4369,7 +4569,16 @@
+                 draw_action(record->anim.blend, record->anim.frame);
+             }
+             if (work->flags & SONIC_CHARGED) {
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++                /* the glow's model is his spin's: it plays his own rows'
++                 * motions, not the super ball's */
++                struct player_action *rows = record->anim.actions;
++                record->anim.actions = sonic_actions;
+                 aura_draw(work, motion, record);
++                record->anim.actions = rows;
++#else
++                aura_draw(work, motion, record);
++#endif
+             }
+         }
+         njPopMatrix(1);
+@@ -7457,8 +7666,14 @@
       * top_speed and ground_accel (FMOV.S at 0x8c0ba198, 0x8c0ba1a0), not
       * where sonic_super_start read them (0x8c0ba246, 0x8c0ba250). his
       * resist.x and air_resist stay as super Sonic's */
