@@ -36,6 +36,12 @@ Newest first. One entry per session, with evidence.
   Sonic's start wherever the trial super is possible (as Chaos 7 does; they join only while
   an action plays on super_sonic_object), and are no longer switched. Super textures now
   only for actions on super_sonic_object, so his ball and spin keep their own.
+- The owner's test of 4e4a747: the transform works, the look and Super music are right. He
+  was too fast and floaty for the stage, his ball (jump, homing, spin dash) was blue, and he
+  only ran at speed. Now: the speed shoes' doubling (player_speed_up_start: ground_accel,
+  top_speed, still_grip times 2) instead of sonic_super_start's constants, put back when he
+  turns back; ACTION_SPRINT and ACTION_FULL_SPEED play super_sonic_run_action (his flight in
+  Chaos 7); every ball, spin and roll row plays super_sonic_ball_action, with super textures.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.

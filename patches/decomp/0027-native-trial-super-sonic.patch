@@ -11,7 +11,7 @@
  #include "system/task.h"
  #include "system/texture.h"
  #include "system/util.h"
-@@ -1226,6 +1230,136 @@
+@@ -1226,6 +1230,160 @@
  }
  
  /* choose his mode for this step, then move, pose and draw him by it */
@@ -31,6 +31,10 @@
 +static NJS_ACTION trial_super_rows[SONIC_ACTION_ROWS];
 +static Bool trial_super_made;
 +static Bool trial_super_textures;
++/* his constants before the speed shoes' doubling (player.c's
++ * player_speed_up_start), put back when he turns back */
++static Float trial_super_ground_accel, trial_super_top_speed,
++    trial_super_still_grip;
 +static Bool trial_super_on;
 +static int trial_super_steps;
 +
@@ -56,7 +60,21 @@
 +            trial_super_rows[i].motion = sonic_actions[i].action->motion;
 +            trial_super_actions[i].action = &trial_super_rows[i];
 +        }
++        if (sonic_actions[i].nodes == BALL_NODES ||
++            sonic_actions[i].nodes == SPIN_NODES) {
++            /* his ball, spin and roll: super Sonic's own ball */
++            trial_super_actions[i].action = &super_sonic_ball_action;
++            trial_super_actions[i].nodes = BALL_NODES;
++        }
 +    }
++    /* at speed he flies, in super Sonic's run (his flight in the last
++     * boss's fight), each holding its own row's place */
++    trial_super_actions[ACTION_SPRINT].action = &super_sonic_run_action;
++    trial_super_actions[ACTION_SPRINT].mode = PLAYER_ANIM_LOOP;
++    trial_super_actions[ACTION_SPRINT].speed = 0.5F;
++    trial_super_actions[ACTION_FULL_SPEED].action = &super_sonic_run_action;
++    trial_super_actions[ACTION_FULL_SPEED].mode = PLAYER_ANIM_LOOP;
++    trial_super_actions[ACTION_FULL_SPEED].speed = 0.5F;
 +    trial_super_made = TRUE;
 +}
 +
@@ -76,10 +94,13 @@
 +    if (task != NULL) {
 +        PLAYER_VARS(task->work)->player = PLAYER_VARS(work)->player;
 +    }
-+    task = task_create(TASK_EXTRA, 2, sonic_super_start);
-+    if (task != NULL) {
-+        SUPER(task)->player = PLAYER_VARS(work)->player;
-+    }
++    /* as fast as with the speed shoes, as the classic games' super form */
++    trial_super_ground_accel = record->consts.ground_accel;
++    trial_super_top_speed = record->consts.top_speed;
++    trial_super_still_grip = record->consts.still_grip;
++    record->consts.ground_accel *= 2.0F;
++    record->consts.top_speed *= 2.0F;
++    record->consts.still_grip *= 2.0F;
 +    record->anim.actions = trial_super_actions;
 +    trial_super_on = TRUE;
 +    trial_super_steps = 0;
@@ -93,6 +114,9 @@
 +{
 +    record->upgrades &= ~PLAYER_SONIC_SUPER;
 +    record->anim.actions = sonic_actions;
++    record->consts.ground_accel = trial_super_ground_accel;
++    record->consts.top_speed = trial_super_top_speed;
++    record->consts.still_grip = trial_super_still_grip;
 +    trial_super_on = FALSE;
 +    stream_restore_music();
 +    native_hook_note("trial super: off, rings", ring_count(), 0);
@@ -148,7 +172,7 @@
  void sonic_step(struct task *task)
  {
      struct task_work *work = task->work;
-@@ -1248,6 +1382,12 @@
+@@ -1248,6 +1406,12 @@
      if (edit_mode == 1) {
          work->mode = SONIC_EDIT;
      } else if (work->mode != SONIC_DOWN) {
@@ -161,7 +185,7 @@
          sonic_choose_mode(work, motion, record);
      }
      /* his shape's attack and guard levels: the highest while he's
-@@ -1313,7 +1453,15 @@
+@@ -1313,7 +1477,15 @@
          {
              struct weld *weld = sonic_welds;
  
@@ -178,7 +202,7 @@
                  for (; weld->base != NULL; weld++) {
                      if (weld->base == &super_sonic_object) {
                          weld->kind = WELD_TO_A;
-@@ -4252,6 +4400,13 @@
+@@ -4252,6 +4424,13 @@
      player_free(PLAYER_VARS(work)->player);
      sound_stop_id((int)work);
      texture_release_character(CHARACTER_SONIC);
@@ -192,7 +216,7 @@
  }
  
  /* his shape's center: center_y above his feet, turned with him */
-@@ -4296,7 +4451,13 @@
+@@ -4296,7 +4475,15 @@
          action = record->anim.current;
      }
      if (!(TASK_TIMER(work) & BLINK_HIDDEN)) {
@@ -200,14 +224,16 @@
 +        if ((action >= ACTION_SUPER_STAND && action <= ACTION_SUPER_BALL)
 +#if defined(NONMATCHING) && !defined(DREAMCAST)
 +            || (trial_super_on &&
-+                record->anim.actions[action].action->object ==
-+                    &super_sonic_object)
++                (record->anim.actions[action].action->object ==
++                     &super_sonic_object ||
++                 record->anim.actions[action].action ==
++                     &super_sonic_ball_action))
 +#endif
 +        ) {
              njSetTexture(&super_sonic_texlist);
          } else {
              njSetTexture(&sonic_texlist);
-@@ -7457,8 +7618,14 @@
+@@ -7457,8 +7644,14 @@
       * top_speed and ground_accel (FMOV.S at 0x8c0ba198, 0x8c0ba1a0), not
       * where sonic_super_start read them (0x8c0ba246, 0x8c0ba250). his
       * resist.x and air_resist stay as super Sonic's */
