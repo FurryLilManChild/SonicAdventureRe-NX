@@ -54,6 +54,13 @@ Newest first. One entry per session, with evidence.
   theme, asked for again at the end, and a stage's new music while super becomes the one to go
   back to; the whole of Emerald Coast is open to the trial super, and a super form already on
   keeps its drain and button anywhere.
+- Flight (the owner's design, his answers: landing ends it, the drain stays a ring a second).
+  Buttons, Dreamcast names, in a jump: X turns him super or back; super, B starts flight.
+  Flying (SONIC_FLY, a port mode after SONIC_EDIT; its movement only player_collide and
+  player_take_speed): no gravity, the stick (player_read_stick) turns him by up to 0x800 a
+  step and speeds him to top_speed times the stroke by ground_accel, else he slows by 8% a
+  step; A held climbs and Y held descends at half jump_speed; ACTION_FULL_SPEED, his flight
+  pose. B, landing (PLAYER_ON_GROUND), X or no rings end it. Built apart from b2335e5's test.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.
