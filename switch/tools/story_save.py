@@ -12,6 +12,11 @@ CRC-16 in its header (the card's own, polynomial 0x1021), and both are made agai
 on the Egg Carrier at seq 0, as story_save leaves it there: the next step plays event 113 and
 goes to the Zero fight, then event 114, ev0072, the end of her story. Amy is made playable,
 and her Station Square flags, Twinkle Park's clear and the sunk Egg Carrier are set.
+
+--complete: every story ended, the last story too (src/progress/progress.h's FLAG_PLAYABLE_*,
+FLAG_ALL_CLEAR, FLAG_CLEAR_*), every character's upgrades, all 130 emblems, and each stage
+counted cleared at least once for each character (stage_clears), for testing what opens
+after the game is finished. The story records are left as they are.
 """
 import argparse
 import struct
@@ -29,6 +34,14 @@ STORY_NO_WAIT = 0xFFFF
 FLAG_PLAYABLE_SONIC = 65
 FLAG_PLAYABLE_AMY = 68
 AMY_FLAGS = [320, 321, 323, 324, 325, 326, 327, 333, 342]
+COMPLETE_FLAGS = list(range(65, 79))  # playable 65-70, all clear 71, clears 72-78
+UPGRADE_FLAGS = [141, 142, 159, 205, 219, 281, 282, 338, 350, 393, 394, 464, 465,
+                 478, 479, 480, 481, 482]
+EMBLEMS_AT = 0x240
+EMBLEMS = 130
+STAGE_CLEARS = 0x348  # after the eight story records
+CHARACTERS = 8
+STAGES = 43
 
 
 def save_crc(buf):
@@ -73,6 +86,7 @@ def main():
     ap.add_argument('out')
     ap.add_argument('--slot', type=int, default=1)
     ap.add_argument('--amy-zero', action='store_true')
+    ap.add_argument('--complete', action='store_true')
     a = ap.parse_args()
     card = bytearray(open(a.card, 'rb').read())
     blocks = file_blocks(card, b'SONICADV_SYS')
@@ -86,6 +100,14 @@ def main():
             s[EVENT_FLAGS + flag // 8] |= 1 << flag % 8
         struct.pack_into('<bbhhhHH', s, STORY_RECORDS + RECORD * CHARACTER_AMY, 0, 0, 0,
                          AMY_ZERO_SECTION, 0, STAGE_EGG_CARRIER << 8, STORY_NO_WAIT)
+    if a.complete:
+        for flag in COMPLETE_FLAGS + UPGRADE_FLAGS:
+            s[EVENT_FLAGS + flag // 8] |= 1 << flag % 8
+        for e in range(EMBLEMS):
+            s[EMBLEMS_AT + e // 8] |= 1 << e % 8
+        for i in range(CHARACTERS * STAGES):
+            if s[STAGE_CLEARS + i] == 0:
+                s[STAGE_CLEARS + i] = 1
     struct.pack_into('<H', s, 0, save_crc(s[4:]))
     f[at:at + SAVE_SIZE] = s
     size = 0x80 + struct.unpack_from('<H', f, 0x40)[0] * 0x200 + struct.unpack_from('<I', f, 0x48)[0]
@@ -94,7 +116,8 @@ def main():
     for i, b in enumerate(blocks):
         card[b * BLOCK:(b + 1) * BLOCK] = f[i * BLOCK:(i + 1) * BLOCK]
     open(a.out, 'wb').write(card)
-    print(f'{a.out}: save {a.slot} at Amy before Zero' if a.amy_zero else a.out)
+    print(f'{a.out}: save {a.slot}' + (' at Amy before Zero' if a.amy_zero else '') +
+          (', everything complete' if a.complete else ''))
 
 
 if __name__ == '__main__':
