@@ -140,15 +140,15 @@ const char *nx_menu_hint(void);
 #define MENU_SCALE 2
 #define MENU_LINE (11 * MENU_SCALE)
 #define MENU_W 440
-#define MENU_H 410
+#define MENU_H 440
 static uint8_t menu_px[MENU_W * MENU_H * 4];
 
 static void draw_menu(void)
 {
     struct canvas k = {menu_px, MENU_W, MENU_H};
-    char lines[16][40];
+    char lines[18][40];
     int selected = -1;
-    int n = nx_menu_lines(lines, 16, &selected);
+    int n = nx_menu_lines(lines, 18, &selected);
     fill(&k, 0, 0, k.w, k.h, 230);       // a light frame
     fill(&k, 3, 3, k.w - 6, k.h - 6, 20); // a dark panel
     int y = 18;

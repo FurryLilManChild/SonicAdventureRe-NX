@@ -1,0 +1,96 @@
+diff --git a/engine/native/bare.c b/engine/native/bare.c
+index de5ac67..5efb667 100644
+--- a/engine/native/bare.c
++++ b/engine/native/bare.c
+@@ -154,6 +154,11 @@ int native_hook_trials_open(void)
+     return 0;
+ }
+ 
++int native_hook_super_unlocked(void)
++{
++    return 0;
++}
++
+ int native_hook_save_now(int can)
+ {
+     (void)can;
+diff --git a/src/collision/world.c b/src/collision/world.c
+index 1fec5ad..d5ecba8 100644
+--- a/src/collision/world.c
++++ b/src/collision/world.c
+@@ -1248,6 +1248,47 @@ void world_compute_bounds(void)
+     }
+ }
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++/* the port's super Sonic (sonic.c): the highest point of the act's solid
++ * land, for his flight's ceiling. each solid entry's points, placed as
++ * world_compute_bounds places its center. FALSE with no land loaded */
++int native_world_land_top(Float *top)
++{
++    Sint16 i;
++    Uint32 k;
++    struct land_entry *entry;
++    NJS_OBJECT *object;
++    NJS_MODEL *model;
++    NJS_POINT3 point;
++    int found = FALSE;
++
++    if (world_land == NULL) {
++        return FALSE;
++    }
++    for (i = 0; i < world_land->count; i++) {
++        entry = &world_land->entries[i];
++        object = entry->object;
++        if (!(entry->flags & WORLD_SOLID) || object == NULL ||
++            (model = object->model) == NULL || model->points == NULL) {
++            continue;
++        }
++        njPushMatrix(&_unit_matrix_);
++        njTranslate(NULL, object->pos[0], object->pos[1], object->pos[2]);
++        TURN(njRotateX, object->ang[0]);
++        TURN(njRotateY, object->ang[1]);
++        for (k = 0; k < (Uint32)model->nbPoint; k++) {
++            njCalcPoint(NULL, &model->points[k], &point);
++            if (!found || point.y > *top) {
++                *top = point.y;
++                found = TRUE;
++            }
++        }
++        njPopMatrix(1);
++    }
++    return found;
++}
++#endif
++
+ void world_list_all(void)
+ {
+     struct world_object *out = world_objects;
+diff --git a/src/hud/hud.c b/src/hud/hud.c
+index 7967425..b2896ed 100644
+--- a/src/hud/hud.c
++++ b/src/hud/hud.c
+@@ -22,6 +22,9 @@
+ #include "sound/sound.h"
+ #include "sound/stream.h"
+ #include "stage/stage.h"
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++extern int native_super_used;
++#endif
+ #include "stg00/mole.h"
+ #include "system/frame.h"
+ #include "system/pad.h"
+@@ -2680,6 +2683,13 @@ static void score_act_step(struct task *task)
+         stage = stage_get_stage_act() >> 8;
+         /* a shorter time beats the saved one, or for E-102 more time left.
+          * the save keeps no time of Big's */
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++        /* the port's super Sonic (sonic.c): a run he turned super in keeps
++         * no record */
++        if (native_super_used) {
++            work->record = 0.0F;
++        } else
++#endif
+         if (stage != STAGE_PRACTICE && stage <= STAGE_ACTION_LAST) {
+             save = &saves[save_slot];
+             character = get_character();

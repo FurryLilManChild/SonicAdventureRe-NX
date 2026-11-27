@@ -2,6 +2,30 @@
 
 Newest first. One entry per session, with evidence.
 
+## 2026-11-27: Super Sonic, the details batch
+
+- Unlock: Super Sonic once the last story is cleared (event_flags[FLAG_CLEAR_LAST]), or with the
+  port menu's new SUPER SONIC row set to UNLOCKED (settings.txt `super unlocked`; hook
+  native_hook_super_unlocked, patch 0029's bare.c default, wrapped in nx_menu.c). An unlock made
+  mid-act waits for Sonic's next start, since his super welds are only made at a start (the
+  crash of 2026-11-26).
+- Where: any action stage, story or trial, with 50 rings and the drain (Casinopolis' pinball acts
+  excluded); bosses the same but with no flight (not Perfect Chaos, which has its own); adventure
+  fields free (no rings, no drain). The Emerald Coast only rule is gone.
+- Flight ceiling: fields keep takeoff + 200. Action stages: the act's highest solid land point
+  (patch 0029's native_world_land_top in world.c, each solid entry's points placed as
+  world_compute_bounds places them) plus 100, never less than takeoff + 200. Each takeoff logs
+  the ceiling's height above takeoff ("trial super: flight ceiling").
+- He turns back for boards, rides and scenes (event_in_control) in action stages too.
+- Super needs no air: underwater_steps is held at 0 while Super (the original Super form drowns
+  like Sonic; player.c's count has no super test).
+- Records: a run he turned Super in (with rings) saves no score, time or rings (hud.c ACT_SAVE,
+  patch 0029); native_super_used clears when a new run's clock reads 0:00.
+- Goal pose: super_sonic_clear_action in the super table's ACTION_CLEAR row.
+- The NRO's icon is back (the owner's image, assets/icon.jpg, ignored).
+- Still open: the transform sound and flash; the texture "release of a free record" (the
+  2026-11-26 Final Egg log shows 1 after a pause restart, with no Super; cause not found yet).
+
 ## 2026-11-26: Super Sonic in trial mode, plan and phase 1
 
 - The owner's design: a Super Sonic slot on the trial wheel (Sonic's stages and Perfect Chaos);
