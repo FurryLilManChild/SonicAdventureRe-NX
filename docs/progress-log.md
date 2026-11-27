@@ -71,6 +71,12 @@ Newest first. One entry per session, with evidence.
   sonic_ball_follow_create and sonic_ball_shrink_create make the last boss's super versions
   (super_dash_start, super_ball_follow_start, super_ball_shrink_start), and ball_jitter_draw
   draws super_sonic_ball_action's model with super textures.
+- The owner's test of cd5abd3: flight works ("pretty damned good"); climbing and descending
+  too slow. Now at jump_speed (was half). And the super form in adventure fields (his
+  design): outside a trial, in Station Square to the past, X in a jump turns Sonic super
+  with no rings and no drain (trial_super_free), flight as in the trial; a scene taking him
+  (event_in_control) or leaving the fields turns him back. While tested it's open at any
+  point of his story; SUPER_FIELD_NEEDS_LAST_STORY 1 for a release (FLAG_CLEAR_LAST).
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.
