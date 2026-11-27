@@ -1,6 +1,46 @@
 --- a/src/player/effects.c
 +++ b/src/player/effects.c
-@@ -1304,6 +1304,24 @@
+@@ -11,6 +11,14 @@
+ #include "debug/editor.h"
+ #include "draw/sprite.h"
+ #include "draw/tree.h"
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++#include "b_chaos7/super.h"
++/* SonicAdventureRe-nx: the player an effect belongs to is super */
++#define PLAYER_RECORD_SUPER(work)                              \
++    (player_records[PLAYER_VARS(work)->player] != NULL &&      \
++     (player_records[PLAYER_VARS(work)->player]->upgrades &    \
++      PLAYER_SONIC_SUPER))
++#endif
+ #include "hud/hud.h"
+ #include "object/placement.h"
+ #include "player/effects.h"
+@@ -961,6 +969,12 @@
+     color.r = color.g = color.b = 0.0F;
+     color.a = -(TASK_TIMER(work) * (1.0F / BALL_STEPS));
+     njSetConstantMaterial(&color);
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    /* SonicAdventureRe-nx: super Sonic charges his own gold ball */
++    if (PLAYER_RECORD_SUPER(work)) {
++        njSetTexture(&super_sonic_texlist);
++    } else
++#endif
+     njSetTexture(BALL(work)->texlist);
+     njPushMatrix(NULL);
+     njTranslate(NULL, work->pos.x + player->pos.x, work->pos.y + player->pos.y,
+@@ -977,6 +991,11 @@
+     vec.y = 1.1F;
+     vec.z = 0.8F;
+     njScaleV(NULL, &vec);
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    if (PLAYER_RECORD_SUPER(work)) {
++        draw_tree(super_sonic_ball_action.object);
++    } else
++#endif
+     draw_tree(&sonic_ball_object);
+     njPopMatrix(1);
+     color.a = 0.0F;
+@@ -1304,6 +1323,24 @@
      }
  }
  
@@ -25,7 +65,7 @@
  /* while the record blends, the aura draws the blend in place of the action. its
   * first color's green falls from 0.28 to 0.1 and rises back over each 128 steps
   * of play time */
-@@ -1346,13 +1364,13 @@
+@@ -1346,13 +1383,13 @@
      color.g = 0.28F - (phase * 0.18F);
      color.b = 1.0F;
      color.a = 0.0F;
@@ -41,7 +81,7 @@
      sx = 1.05F;
      sy = 1.05F;
      sz = 1.05F;
-@@ -1360,14 +1378,14 @@
+@@ -1360,14 +1397,14 @@
      njSimpleAction(&action, record->anim.frame);
      color.g -= 0.05F;
      color.b = 0.3F;

@@ -298,14 +298,16 @@
                  for (; weld->base != NULL; weld++) {
                      if (weld->base == &super_sonic_object) {
                          weld->kind = WELD_TO_A;
-@@ -2038,6 +2299,14 @@
+@@ -2038,6 +2299,16 @@
      case SONIC_EDIT:
          sonic_edit(work, motion, record);
          break;
 +#if defined(NONMATCHING) && !defined(DREAMCAST)
 +    case SONIC_FLY:
-+        /* trial_super_fly set his speed; the world's walls and floors
-+         * still stop him */
++        /* trial_super_fly set his speed (and no accel); apply_accel turns
++         * it into the world, and the world's walls and floors still stop
++         * him */
++        player_apply_accel(work, motion, record);
 +        player_collide(work, motion, record);
 +        player_take_speed(work, motion, record);
 +        break;
@@ -313,7 +315,7 @@
      }
      player_anim_step(&record->anim);
      /* uncurled, he wears the light speed shoes and the crystal ring if he
-@@ -4252,6 +4521,13 @@
+@@ -4252,6 +4523,13 @@
      player_free(PLAYER_VARS(work)->player);
      sound_stop_id((int)work);
      texture_release_character(CHARACTER_SONIC);
@@ -327,7 +329,7 @@
  }
  
  /* his shape's center: center_y above his feet, turned with him */
-@@ -4296,7 +4572,15 @@
+@@ -4296,7 +4574,15 @@
          action = record->anim.current;
      }
      if (!(TASK_TIMER(work) & BLINK_HIDDEN)) {
@@ -344,7 +346,7 @@
              njSetTexture(&super_sonic_texlist);
          } else {
              njSetTexture(&sonic_texlist);
-@@ -4369,7 +4653,16 @@
+@@ -4369,7 +4655,16 @@
                  draw_action(record->anim.blend, record->anim.frame);
              }
              if (work->flags & SONIC_CHARGED) {
@@ -353,15 +355,60 @@
 +                 * motions, not the super ball's */
 +                struct player_action *rows = record->anim.actions;
 +                record->anim.actions = sonic_actions;
-+                aura_draw(work, motion, record);
+                 aura_draw(work, motion, record);
 +                record->anim.actions = rows;
 +#else
-                 aura_draw(work, motion, record);
++                aura_draw(work, motion, record);
 +#endif
              }
          }
          njPopMatrix(1);
-@@ -7457,8 +7750,14 @@
+@@ -7229,6 +7524,14 @@
+ {
+     struct task *task;
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    /* the port's trial super: the last boss's gold version */
++    if (trial_super_on) {
++        sonic_super_dash_create(work);
++        return;
++    }
++#endif
++
+     if ((task = task_create(TASK_WORK, 6, dash_start)) != NULL) {
+         PLAYER_VARS(task->work)->player = PLAYER_VARS(work)->player;
+     }
+@@ -7256,6 +7559,14 @@
+ {
+     struct task *task;
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    /* the port's trial super: the last boss's gold version */
++    if (trial_super_on) {
++        sonic_super_ball_follow_create(work);
++        return;
++    }
++#endif
++
+     if ((task = task_create(TASK_WORK, 5, ball_follow_start)) != NULL) {
+         PLAYER_VARS(task->work)->player = PLAYER_VARS(work)->player;
+     }
+@@ -7274,6 +7585,14 @@
+ {
+     struct task *task;
+ 
++#if defined(NONMATCHING) && !defined(DREAMCAST)
++    /* the port's trial super: the last boss's gold version */
++    if (trial_super_on) {
++        sonic_super_ball_shrink_create(work);
++        return;
++    }
++#endif
++
+     if ((task = task_create(TASK_WORK, 5, ball_shrink_start)) != NULL) {
+         PLAYER_VARS(task->work)->player = PLAYER_VARS(work)->player;
+     }
+@@ -7457,8 +7776,14 @@
       * top_speed and ground_accel (FMOV.S at 0x8c0ba198, 0x8c0ba1a0), not
       * where sonic_super_start read them (0x8c0ba246, 0x8c0ba250). his
       * resist.x and air_resist stay as super Sonic's */

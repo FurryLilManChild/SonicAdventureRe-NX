@@ -61,6 +61,16 @@ Newest first. One entry per session, with evidence.
   step and speeds him to top_speed times the stroke by ground_accel, else he slows by 8% a
   step; A held climbs and Y held descends at half jump_speed; ACTION_FULL_SPEED, his flight
   pose. B, landing (PLAYER_ON_GROUND), X or no rings end it. Built apart from b2335e5's test.
+- The owner's test of 8039f14 (log: X on and off, B flight on at 94.5 s, off at 104.4 s): the
+  music comes back now. Flight held him in the air but nothing moved him: SONIC_FLY's case
+  skipped player_apply_accel, which alone turns record->speed into motion->speed for
+  player_collide; it now calls it. The blue around him in the spin dash and homing was not
+  aura_draw's (its gold swap changed nothing he saw) but the streaks (dash_start), the trail
+  of balls (ball_follow_start) and the charge's shaking ball (ball_jitter, sonic_ball_object
+  with the blue ball textures). While the trial super is on, sonic_dash_create,
+  sonic_ball_follow_create and sonic_ball_shrink_create make the last boss's super versions
+  (super_dash_start, super_ball_follow_start, super_ball_shrink_start), and ball_jitter_draw
+  draws super_sonic_ball_action's model with super textures.
 - Phase 1: B_CHAOS7's Super Sonic data and effects are linked into every stage natively
   (loads.c); SUPERSONIC.PVM needs loading by hand outside Chaos 7; the action button is free
   in SONIC_JUMP; trial records have no room in the save.
